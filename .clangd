@@ -1,6 +1,6 @@
 ---
 CompileFlags:
-  Add: [ -xc, -std=c23, -Wall, -Wextra, -Wno-empty-translation-unit,  -pedantic, -I../include, -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include ]
+  Add: [ -xc, -std=c23, -Wall, -Wextra, -Wno-empty-translation-unit,  -pedantic, -I../include, -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include]
   Compiler: arm-none-eabi-gcc
 ---
 If:

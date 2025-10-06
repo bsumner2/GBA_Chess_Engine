@@ -11,17 +11,8 @@ KEY_CURR:
 KEY_PREV:
     .zero 2
     .size KEY_PREV, 2
-
-    .section .ewram,"ax",%progbits
-    .thumb_func
-    .align 2
-    .global Vsync
-    .type Vsync %function
-Vsync:
-    SVC 0x05
-    BX lr
-    .size Vsync, .-Vsync
-
+    
+    .section .text
     .thumb_func
     .align 2
     .global IRQ_Sync

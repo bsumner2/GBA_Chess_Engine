@@ -1,5 +1,4 @@
 /** (C) Burt Sumner 2025 */
-#include <errno.h>
 #include <stddef.h>
 
 #include <GBAdev_types.h>
@@ -26,12 +25,7 @@ static void ChessObj_Init_All_Pieces(ChessObj_Set_t *obj_data,
 static void ChessBoard_Init(ChessBoard_t);
 
 
-static 
-Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
-                                            const ChessBoard_t board_data,
-                                            const ChessBoard_Idx_t move[2],
-                                            const ChessPiece_Tracker_t *tracker,
-                                            const PGN_Round_LL_t *mvmt_ll);
+
 
 static Move_Validation_Flag_e ChessBoard_ValidateEnPassent(
                                          const ChessBoard_t board_data,
@@ -44,34 +38,26 @@ static Move_Validation_Flag_e ChessBoard_ValidateCastle(const ChessBoard_Row_t *
                                                         const ChessPiece_Tracker_t *tracker,
                                                         const PGN_Round_LL_t *mvmt_ll);
 
-static 
-BOOL ChessBoard_KingMove_EntersCheck(const ChessBoard_t board_data,
-                                     const ChessBoard_Idx_t move[2],
-                                     const ChessPiece_Tracker_t *tracker);
 
-static 
-BOOL ChessBoard_KingMove_EscapesCheck(const ChessGameCtx_t *ctx,
-                                      const ChessPiece_Data_t *checking_pieces,
-                                      Move_Validation_Flag_e move_result,
-                                      u32 pieces_checking);
 
 static BOOL ChessBoard_PieceIsPinned(
                               const ChessBoard_t board_data, 
                               const ChessBoard_Idx_t *move,
                               const ChessPiece_Tracker_t *piece_tracker);
 
-static BOOL ChessBoard_ValidateMoveClearance(const ChessBoard_t board_data,
-                                             const ChessBoard_Idx_t move[2],
-                                             Mvmt_Dir_e dir);
 
-static int ChessBoard_KingInCheck(ChessPiece_Data_t **return_pieces,
-                                  const ChessPiece_Tracker_t *tracker,
-                                  u32 team);
 static BOOL ChessBoard_ValidateMoveAddressesCheck(
                                       const ChessGameCtx_t *ctx,
                                       const ChessPiece_Data_t *checking_pieces,
-                                      Move_Validation_Flag_e move_result,
-                                      u32 pieces_checking);
+                                      u32 checking_piece_ct,
+                                      Move_Validation_Flag_e move_result);
+static
+BOOL ChessBoard_ValidateKingMoveEvadesOpp(
+                                    const ChessBoard_t board_data,
+                                    const ChessBoard_Idx_t *move,
+                                    const ChessPiece_Data_t *checking_piece);
+
+
 
 static int ChessPiece_Data_Cmp_Cb(const void *a, const void *b);
 
@@ -176,8 +162,8 @@ void ChessObj_Init_All_Pieces(ChessObj_Set_t *obj_data, Graph_t *piece_graph) {
   PAL_MEM_OBJ[0] = 0;
   PAL_MEM_OBJ[1] = WHITE_PIECE_CLR;
   PAL_MEM_OBJ[2] = BLACK_PIECE_CLR;
-  PAL_MEM_OBJ[3] = WHITE_SEL_SQUARE_CLR;
-  PAL_MEM_OBJ[4] = BLACK_SEL_SQUARE_CLR;
+  PAL_MEM_OBJ[3] = VALID_SEL_SQUARE_CLR;
+  PAL_MEM_OBJ[4] = INVALID_SEL_SQUARE_CLR;
   Load_Chess_Sprites_8BPP(&TILE8_MEM[4][0],
                           1, 3);
   Load_Chess_Sprites_8BPP(&TILE8_MEM[4]
@@ -197,7 +183,8 @@ void ChessObj_Init_All_Pieces(ChessObj_Set_t *obj_data, Graph_t *piece_graph) {
 #define ChessBoard_ValidateMoveEndPosEmptyOrOpp(whose_turn, end_piece)\
   (0==(whose_turn&end_piece) || EMPTY_IDX==(PIECE_IDX_MASK&end_piece))
 
-Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(const ChessBoard_t board_data,
+Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
+                                     const ChessBoard_t board_data,
                                      const ChessBoard_Idx_t move[2],
                                      const ChessPiece_Tracker_t *tracker,
                                      const PGN_Round_LL_t *mvmt_ll) {
@@ -287,6 +274,7 @@ Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(const ChessBoard_t board_
         return MOVE_UNSUCCESSFUL;
       }
     }
+    return MOVE_SUCCESSFUL|capture_flag;
     break;
   case QUEEN_IDX:
     {
@@ -305,23 +293,48 @@ Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(const ChessBoard_t board_
     break;
   case KING_IDX:
     {
-      if (1==__builtin_popcount(dir&(HOR_MASK|VER_MASK))) {
-        if (1>= ABS(xdiff, 32) && 1>= ABS(ydiff, 32))
-          break;
-        if (VER_MASK&dir)
-          return MOVE_UNSUCCESSFUL;
+      int popct = __builtin_popcount(dir);
+      if (0==(popct&1))
+        return MOVE_UNSUCCESSFUL;
+      if (3==popct) {
+        assert((0!=(DIAGONAL_MVMT_FLAGBIT&dir))
+                &(0!=(dir&HOR_MASK))
+                &(0!=(dir&VER_MASK)));
+        if (1==ABS(xdiff, 32) && 1==ABS(ydiff,32))
+          return MOVE_SUCCESSFUL|capture_flag;
+      } else if (1==popct) {
+        assert((0!=(dir&HOR_MASK))
+                ^(0!=(dir&VER_MASK)));
+        if (dir&VER_MASK)
+          return (1==ABS(ydiff, 32) && 0==xdiff)
+              ? (MOVE_SUCCESSFUL|capture_flag)
+              : (MOVE_UNSUCCESSFUL);
+      } else {
+        return MOVE_UNSUCCESSFUL;
       }
-      if (FILE_E==spos.coord.x && (FILE_C==epos.coord.x || FILE_G==epos.coord.x)) {
+      // Add this assertion to make sure logic flow follows expected path
+      assert(dir&HOR_MASK);
+      if (1==ABS(xdiff,32) && 0==ydiff) {
+        return  MOVE_SUCCESSFUL|capture_flag;
+      } else if (FILE_E==spos.coord.x && (FILE_C==epos.coord.x 
+                                          || FILE_G==epos.coord.x)) {
         if (WHITE_FLAGBIT&spiece) {
-          if (ROW_1==spos.coord.y && ROW_1==epos.coord.y) {
-            return ChessBoard_ValidateCastle(board_data, move, tracker, mvmt_ll);
-
-          }
+          if (ROW_1==spos.coord.y && ROW_1==epos.coord.y)
+            return ChessBoard_ValidateCastle(board_data,
+                                             move,
+                                             tracker,
+                                             mvmt_ll);
+        } else if (ROW_8==spos.coord.y && ROW_8==epos.coord.y) {
+          return ChessBoard_ValidateCastle(board_data,
+                                           move,
+                                           tracker,
+                                           mvmt_ll);
         }
       }
-
+      return MOVE_UNSUCCESSFUL;
+      break;
     }
-  default: return MOVE_UNSUCCESSFUL;
+  default: assert(0);
   }
   if (dir&INVALID_MVMT_FLAGBIT)
     return MOVE_UNSUCCESSFUL;
@@ -378,7 +391,7 @@ BOOL ChessBoard_PieceIsPinned(const ChessBoard_t board_data,
                             ? PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT 
                             : 0,
          opp_vert_idx_ofs;
-
+  ChessPiece_e attacking_piece;
   Mvmt_Dir_e attacker_rel_start_loc, start_loc_rel_king, attacker_rel_end_pos;
   opp_vert_idx_ofs = PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT^allied_vert_idx_ofs;
   query.location = spos;
@@ -401,7 +414,9 @@ BOOL ChessBoard_PieceIsPinned(const ChessBoard_t board_data,
       assert(0==(piece_tracker->roster.all&(1<<(i+opp_vert_idx_ofs))));
       continue;
     }
-    if (board_data[BOARD_IDX(attacking_pdata->location)]==KNIGHT_IDX)
+    attacking_piece
+      = board_data[BOARD_IDX(attacking_pdata->location)]&PIECE_IDX_MASK;
+    if (attacking_piece==KNIGHT_IDX || attacking_piece==PAWN_IDX)
       continue;
 
     LL_FOREACH(LL_NODE_VAR_INITIALIZER(GraphEdge, cur), cur, edges) {
@@ -432,7 +447,7 @@ BOOL ChessBoard_PieceIsPinned(const ChessBoard_t board_data,
   }
   return FALSE;
 }
-
+#ifdef _USE_OLD_KING_ENTERS_CHECK_IMPL_
 BOOL ChessBoard_KingMove_EntersCheck(const ChessBoard_t board_data,
                                      const ChessBoard_Idx_t move[2],
                                      const ChessPiece_Tracker_t *tracker) {
@@ -478,8 +493,8 @@ BOOL ChessBoard_KingMove_EntersCheck(const ChessBoard_t board_data,
         return MOVE_UNSUCCESSFUL;
     }
   }
-  if (brow[FILE_D]==(PAWN_IDX|(PIECE_TEAM_MASK^team_flag)))
-    return MOVE_UNSUCCESSFUL;
+  /* if (brow[FILE_D]==(PAWN_IDX|(PIECE_TEAM_MASK^team_flag)))
+   * return MOVE_UNSUCCESSFUL; */
   for (u32 i = 0; i < CHESS_TEAM_PIECE_COUNT; ++i) {
     if (0UL==(tracker->roster.all&(1UL<<(opp_roster_ofs+i))))
       continue;
@@ -550,7 +565,32 @@ BOOL ChessBoard_KingMove_EntersCheck(const ChessBoard_t board_data,
   return MOVE_UNSUCCESSFUL;
 }
 
-
+#else
+BOOL ChessBoard_KingMove_EntersCheck(const ChessBoard_t board_data,
+                                     const ChessBoard_Idx_t move[2],
+                                     const ChessPiece_Tracker_t *tracker) {
+  const GraphNode_t *vertex = tracker->piece_graph->vertices;
+  const u32 ROSTER_STATE = tracker->roster.all,
+            WHOSE_TURN = PIECE_TEAM_MASK&GET_BOARD_AT_IDX(board_data, move[0]);
+  u32 opp_idx_ofs;
+  assert(1==__builtin_popcount(WHOSE_TURN));
+  opp_idx_ofs = WHOSE_TURN&WHITE_FLAGBIT
+                    ? 0 
+                    : PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT;
+  vertex+=opp_idx_ofs;
+  for (int i = 0; i < CHESS_TEAM_PIECE_COUNT; ++i, ++vertex) {
+    assert((int)(i|opp_idx_ofs)==(vertex->idx));
+    if (0==(ROSTER_STATE&(1<<(i|opp_idx_ofs)))) {
+      assert(NULL==vertex->data);
+      continue;
+    }
+    if (!ChessBoard_ValidateKingMoveEvadesOpp(board_data, move, vertex->data))
+      return TRUE;  // If it fails to evade said, opp, then it, by def,
+                    // enters check
+  }
+  return FALSE;
+}
+#endif
 /**
  * @brief returns the number of pieces checking king */
 int ChessBoard_KingInCheck(ChessPiece_Data_t **return_pieces,
@@ -610,24 +650,22 @@ int ChessBoard_KingInCheck(ChessPiece_Data_t **return_pieces,
 BOOL ChessBoard_ValidateMoveAddressesCheck(
                                       const ChessGameCtx_t *ctx,
                                       const ChessPiece_Data_t *checking_pieces,
-                                      Move_Validation_Flag_e move_result,
-                                      u32 pieces_checking) {
+                                      u32 checking_piece_ct,
+                                      Move_Validation_Flag_e move_result) {
   ChessBoard_Idx_t auxmove[2];
   const Graph_t *graph;
-  const GraphNode_t *curvert;
   const ChessPiece_Data_t *allied_king_data;
   ChessBoard_Idx_t spos, epos, allied_king_pos, tmp, checker_pos;
   ChessPiece_Roster_t roster;
-  u32 allied_vert_ofs, opp_vert_ofs=0, turn;
+  u32 allied_vert_ofs, turn;
   Mvmt_Dir_e move_rel_king_dir, checker_rel_king_dir, check_rel_move_dir;
   
-  assert(0 < pieces_checking);
+  assert(0 < checking_piece_ct);
   assert(NULL!=checking_pieces);
   turn = ctx->whose_turn;
   allied_vert_ofs = turn&WHITE_FLAGBIT
                       ? PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT
                       : 0;
-  opp_vert_ofs ^= allied_vert_ofs;
   graph = ctx->tracker.piece_graph;
   allied_king_data
     = ((ChessPiece_Data_t*)
@@ -637,7 +675,7 @@ BOOL ChessBoard_ValidateMoveAddressesCheck(
        epos = ctx->move_selections[1],
        allied_king_pos = allied_king_data->location;
   roster = ctx->tracker.roster;
-  if (1==pieces_checking) {
+  if (1==checking_piece_ct) {
     auxmove[0] = epos; 
     auxmove[1] = allied_king_pos;
     move_rel_king_dir = ChessBoard_MoveGetDir(auxmove);
@@ -670,7 +708,8 @@ BOOL ChessBoard_ValidateMoveAddressesCheck(
     return FALSE;
 
   auxmove[1] = epos;
-  for (int i = 0; (const int)pieces_checking > i; ++i) {
+  for (int i = 0; (const int)checking_piece_ct > i; ++i) {
+    assert(0!=(roster.all&(1<<(checking_pieces[i].roster_id))));
     checker_pos = auxmove[0] = checking_pieces[i].location;
     if (checker_pos.raw==epos.raw) {
       continue;
@@ -750,27 +789,24 @@ Move_Validation_Flag_e ChessBoard_ValidateMove(const ChessGameCtx_t *ctx) {
     if (0!=num_checking_pieces) {
       assert(NULL!=checking_pieces);
       if (KING_IDX==(start&PIECE_IDX_MASK)) {
-        if (!ChessBoard_KingMove_EscapesCheck(ctx,
+        if (!ChessBoard_ValidateKingMoveEvadesCheck(ctx,
                                       checking_pieces,
-                                      ret,
-                                      num_checking_pieces)) {
+                                      num_checking_pieces,
+                                      ret)) {
           free(checking_pieces);
           checking_pieces = NULL;
           return MOVE_UNSUCCESSFUL;
         }
-        free(checking_pieces);
-        checking_pieces = NULL;
-      } else if (ChessBoard_ValidateMoveAddressesCheck(ctx, 
+      } else if (!ChessBoard_ValidateMoveAddressesCheck(ctx,
                                               checking_pieces,
-                                              ret,
-                                              num_checking_pieces)) {
+                                              num_checking_pieces,
+                                              ret)) {
         free(checking_pieces);
         checking_pieces = NULL;
-        return ret;
+        return MOVE_UNSUCCESSFUL;
       }
       free(checking_pieces);
       checking_pieces = NULL;
-      return MOVE_UNSUCCESSFUL;
     }
   }
 
@@ -811,21 +847,24 @@ Move_Validation_Flag_e ChessBoard_ValidateEnPassent(const ChessBoard_t board_dat
 #if 0
     if (PAWN_IDX!=BOARD_BACK_ROWS_INIT[mv.roster_id])
       return MOVE_UNSUCCESSFUL;
-    if (mv.move[1].coord.y == move[0].coord.y && mv.move[1].coord.x == move[1].coord.x)
+    if (mv.move[1].coord.y == move[0].coord.y 
+        && mv.move[1].coord.x == move[1].coord.x)
     return (ROW_2==mv.move[0].coord.y && ROW_4==mv.move[1].coord.y)
       ? MOVE_SUCCESSFUL|MOVE_CAPTURE|MOVE_EN_PASSENT
       : MOVE_UNSUCCESSFUL;
 #else
     if (!(mv.move_outcome&MOVE_PAWN_TWO_SQUARE))
       return MOVE_UNSUCCESSFUL;
-    if ((moving_piece|GET_BOARD_AT_IDX(board_data, mv.move[1]))!=PIECE_TEAM_MASK)
+    if ((moving_piece|GET_BOARD_AT_IDX(board_data,mv.move[1]))!=PIECE_TEAM_MASK)
       return MOVE_UNSUCCESSFUL;
     ChessBoard_Idx_t loc = {
       .coord = {
         .x = move[1].coord.x, .y = move[0].coord.y
       }
     };
-    return mv.move[1].raw != loc.raw ? MOVE_UNSUCCESSFUL : MOVE_SUCCESSFUL|MOVE_CAPTURE|MOVE_EN_PASSENT;
+    return mv.move[1].raw != loc.raw
+      ? MOVE_UNSUCCESSFUL
+      : MOVE_SUCCESSFUL|MOVE_CAPTURE|MOVE_EN_PASSENT;
 #endif
   return MOVE_UNSUCCESSFUL;
 
@@ -890,10 +929,11 @@ BOOL ChessBoard_ValidateMoveClearance(const ChessBoard_t board_data,
 
 
 
-Move_Validation_Flag_e ChessBoard_ValidateCastle(const ChessBoard_Row_t *board_data,
-                                                 const ChessBoard_Idx_t *move,
-                                                 const ChessPiece_Tracker_t *tracker,
-                                                 const PGN_Round_LL_t *mvmt_ll) {
+Move_Validation_Flag_e ChessBoard_ValidateCastle(
+                                            const ChessBoard_Row_t *board_data,
+                                            const ChessBoard_Idx_t *move,
+                                            const ChessPiece_Tracker_t *tracker,
+                                            const PGN_Round_LL_t *mvmt_ll) {
   GraphEdge_LL_t *edges;
   const ChessPiece_e *board_row;
   ChessBoard_Row_e row;
@@ -960,9 +1000,194 @@ Move_Validation_Flag_e ChessBoard_ValidateCastle(const ChessBoard_Row_t *board_d
 
 }
 
-BOOL ChessBoard_KingMove_EscapesCheck(const ChessGameCtx_t *ctx,
-                                      const ChessPiece_Data_t *checking_pieces,
-                                      Move_Validation_Flag_e move_result,
-                                      u32 pieces_checking) {
+#define SINGLE_SQUARE_ATTACKER_MASK 0x0003
+#define PAWN_ATTACKER               0x0001
+#define KING_ATTACKER               0x0002
+#define ANY_DIAGONAL_SQUARE_ATTACKER_MASK 0x000C
+#define BISHOP_ATTACKER                   0x0004
+#define QUEEN_ATTACKER                    0x0008
+#define ANY_VER_HOR_SQUARE_ATTACKER_MASK  0x0018
+#define ROOK_ATTACKER                     0x0010
+
+BOOL ChessBoard_ValidateKingMoveEvadesOpp(
+                                    const ChessBoard_t board_data,
+                                    const ChessBoard_Idx_t *move,
+                                    const ChessPiece_Data_t *checking_piece) {
+  ChessBoard_Idx_t auxmove[2] = {
+    checking_piece->location,  // attacker location
+    move[1]  // king location
+  };
+  int xdiff, ydiff;
+  ChessPiece_e attacking_piece = GET_BOARD_AT_IDX(board_data, auxmove[0]);
+  Mvmt_Dir_e dir;
+
+  dir = ChessBoard_MoveGetDir(auxmove);
+  if (INVALID_MVMT_FLAGBIT==dir)
+    return TRUE;
   
+  xdiff = auxmove[0].coord.x-auxmove[1].coord.x;
+  ydiff = auxmove[0].coord.y-auxmove[1].coord.y;
+  switch (PIECE_IDX_MASK&attacking_piece) {
+  case PAWN_IDX:
+    if (1!=ABS(xdiff, 32))
+      return TRUE;
+    if (WHITE_PAWN==attacking_piece) {
+      if (1!=ydiff)
+        return TRUE;
+    } else if (-1!=ydiff) {
+      return TRUE;
+    }
+    break;
+  case BISHOP_IDX:
+    if (!(DIAGONAL_MVMT_FLAGBIT&dir))
+      return TRUE;
+  case QUEEN_IDX:
+    if (KNIGHT_MVMT_FLAGBIT&dir)
+      return TRUE;
+    if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, dir))
+      return TRUE;
+    break;
+  case KING_IDX:
+    if (1!=ABS(ydiff,32) || 1!=ABS(xdiff,32))
+      return TRUE;
+    break;
+  case ROOK_IDX:
+    if ((DIAGONAL_MVMT_FLAGBIT|KNIGHT_MVMT_FLAGBIT)&dir)
+      return TRUE;
+    assert(1==__builtin_popcount(dir&(HOR_MASK|VER_MASK)));
+    if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, dir))
+      return TRUE;
+    break;
+  case KNIGHT_IDX:
+    if (!(KNIGHT_MVMT_FLAGBIT&dir))
+      return TRUE;
+    break;
+  default: 
+    assert(EMPTY_IDX!=(PIECE_IDX_MASK&attacking_piece));
+    assert(0);
+  }
+  return FALSE;
+  
+
+  
+}
+
+
+                                              
+
+BOOL ChessBoard_ValidateKingMoveEvadesCheck(
+                                     const ChessGameCtx_t *ctx,
+                                     const ChessPiece_Data_t *checking_pieces,
+                                     u32 checking_piece_ct,
+                                     Move_Validation_Flag_e move_result) {
+  const u32 ROSTER_STATE = ctx->tracker.roster.all;
+  for (u32 i = 0; (const u32)checking_piece_ct > i; ++i) {
+    assert(0!=(ROSTER_STATE&(1<<(checking_pieces[i].roster_id))));
+    if (move_result&MOVE_CAPTURE) {
+      if (checking_pieces[i].location.raw==ctx->move_selections[1].raw)
+        continue;
+    }
+    if (ChessBoard_ValidateKingMoveEvadesOpp(ctx->board_data,
+                                             ctx->move_selections,
+                                             &checking_pieces[i]))
+      continue;
+    return FALSE;
+  }
+  return TRUE;
+
+}
+
+/**
+ * @brief returns false if it hits a wall, and will update arg3's ptr to
+ * show what wall square it reached, otherwise, if hits another piece,
+ * it'll return true, and give the piece idx in arg3 out/return ptr.
+ **/
+bool ChessBoard_FindNextObstruction(const ChessBoard_t board_data,
+                                    const ChessBoard_Idx_t *start,
+                                    ChessBoard_Idx_t *return_obstruction_idx,
+                                    Mvmt_Dir_e dir) {
+
+  ChessBoard_Idx_t idx = {.raw = start->raw}, last_valid_idx;
+  BOOL ret = FALSE;
+  *return_obstruction_idx = *start;
+  
+  int dy, dx;
+  if (0!=(INVALID_MVMT_FLAGBIT&dir) || 0!=(KNIGHT_MVMT_FLAGBIT&dir)) {
+    return_obstruction_idx->raw = 0xFFFFFFFFFFFFFFFFULL;
+    return FALSE;
+  }
+
+  switch (VER_MASK&dir) {
+  case UP_FLAGBIT:
+    dy = -1;
+    break;
+  case DOWN_FLAGBIT: 
+    dy = 1;
+    break;
+  case 0:
+    dy = 0;
+    break;
+  default:
+    assert(HOR_MASK!=(HOR_MASK&dir));
+    break;
+  }
+  switch (HOR_MASK&dir) {
+  case LEFT_FLAGBIT: 
+    dx = -1;
+    break;
+  case RIGHT_FLAGBIT: 
+    dx = 1;
+    break;
+  case 0:
+    dx = 0;
+    break;
+  default:
+    assert(VER_MASK!=(VER_MASK&dir));
+    break;
+  }
+  
+  if (dy && dx) {
+    assert(DIAGONAL_MVMT_FLAGBIT&dir);
+  }
+  assert(dy || dx);
+  last_valid_idx = idx;
+  for (idx.coord.x+=dx, idx.coord.y+=dy;
+       0ULL==(idx.raw&0xFFFFFFF8FFFFFFF8ULL); 
+       idx.coord.x+=dx, idx.coord.y+=dy) {
+    last_valid_idx = idx;
+    if (EMPTY_IDX!=(PIECE_IDX_MASK&GET_BOARD_AT_IDX(board_data, idx))) {
+      ret = TRUE;
+      break;
+    }
+  }
+  *return_obstruction_idx = last_valid_idx;
+  return ret;
+}
+
+Knight_Mvmt_Dir_e ChessBoard_KnightMoveGetDir(const ChessBoard_Idx_t *mv,
+                                              Mvmt_Dir_e dir) {
+  int abs_dx, abs_dy;
+  Knight_Mvmt_Dir_e ret = dir&(HOR_MASK|VER_MASK);
+  if (!(dir&KNIGHT_MVMT_FLAGBIT))
+    return 0;
+  abs_dx = mv[1].coord.x - mv[0].coord.x;
+  abs_dy = mv[1].coord.y - mv[0].coord.y;
+  abs_dx = ABS(abs_dx, 32);
+  abs_dy = ABS(abs_dy, 32);
+  if (0!=(abs_dy&~3)) {
+    return 0;
+  }
+  if (0!=(abs_dx&~3)) {
+    return 0;
+  }
+  if (3!=(abs_dx^abs_dy)) {
+    return 0;
+  }
+  if (abs_dx==2)
+    ret|=KNIGHT_MVMT_WIDE_FLAGBIT;
+  else if (abs_dy==2)
+    ret|=KNIGHT_MVMT_TALL_FLAGBIT;
+  else
+    return 0;
+  return ret;
 }

@@ -1,6 +1,8 @@
 #include <GBAdev_util_macros.h>
 #include <GBAdev_types.h>
 #include <GBAdev_memdef.h>
+#include <GBAdev_memmap.h>
+#include <GBAdev_functions.h>
 #include "chess_board.h"
 #include "chess_sprites.h"
 #include "chess_obj_sprites_data.h"
@@ -10,7 +12,6 @@ typedef union u_tile8_pbuf {
   u8 pbuf[8][8];
   Tile8_t tile;
 } Tile8_Pbuf_t;
-
 
 
 EWRAM_CODE static Tile8_Pbuf_t *Format_Chess_Sprite(Tile8_Pbuf_t *buf,
@@ -55,3 +56,5 @@ EWRAM_CODE void Load_Chess_Sprites_8BPP(Tile8_t *dst, u16 fg_clr, u16 sel_bg_clr
       ++ct, csprs+=Chess_sprites_Glyph_Cell_Size)
     curtile = Format_Chess_Sprite(curtile, csprs, fg_clr, ct==EMPTY_IDX?sel_bg_clr:0);
 }
+
+

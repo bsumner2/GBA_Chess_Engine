@@ -94,10 +94,27 @@ typedef enum e_chess_piece_roster_id {
 #define ROW(row) ROW##row
 
 typedef enum e_mvmt_dir {
-  UP_FLAGBIT=0x0002, DOWN_FLAGBIT=0x0001, LEFT_FLAGBIT=0x0008, RIGHT_FLAGBIT=0x0004,
-  HOR_MASK=0x000C, VER_MASK=0x0003, DIAGONAL_MVMT_FLAGBIT=0x0010, 
-  KNIGHT_MVMT_FLAGBIT=0x0020, INVALID_MVMT_FLAGBIT=0x0080
+  UP_FLAGBIT            = 0x0002,
+  DOWN_FLAGBIT          = 0x0001,
+  LEFT_FLAGBIT          = 0x0008,
+  RIGHT_FLAGBIT         = 0x0004,
+  HOR_MASK              = 0x000C,
+  VER_MASK              = 0x0003,
+  DIAGONAL_MVMT_FLAGBIT = 0x0010,
+  KNIGHT_MVMT_FLAGBIT   = 0x0020,
+  INVALID_MVMT_FLAGBIT  = 0x0080
 } Mvmt_Dir_e;
+
+/* I know this is redundant, but I don't care */
+typedef enum e_knight_mvmt_dir {
+  KNIGHT_MVMT_UP_FLAGBIT    = UP_FLAGBIT,
+  KNIGHT_MVMT_DOWN_FLAGBIT  = DOWN_FLAGBIT,
+  KNIGHT_MVMT_LEFT_FLAGBIT  = LEFT_FLAGBIT,
+  KNIGHT_MVMT_RIGHT_FLAGBIT = RIGHT_FLAGBIT,
+  KNIGHT_MVMT_TALL_FLAGBIT  = 0x4000,
+  KNIGHT_MVMT_WIDE_FLAGBIT  = 0x8000,
+  KNIGHT_MVMT_DIM_MASK      = 0xC000
+} Knight_Mvmt_Dir_e;
 
 typedef union u_board_idx {
   struct s_chess_coord {
@@ -180,8 +197,8 @@ typedef struct s_chess_context {
 #define BLACK_SQUARE_CLR        0x2529
 #define BLACK_PIECE_CLR         0x0421
 #define WHITE_PIECE_CLR         0x4A97
-#define WHITE_SEL_SQUARE_CLR    0x7F65
-#define BLACK_SEL_SQUARE_CLR    0x5643
+#define VALID_SEL_SQUARE_CLR    0x7F65
+#define INVALID_SEL_SQUARE_CLR  0x31B8
 
 #define CHESS_BOARD_Y_OFS\
     ((SCREEN_HEIGHT - (Chess_sprites_Glyph_Height * CHESS_BOARD_ROW_COUNT))/2)
@@ -200,8 +217,33 @@ void ChessGameCtx_Init(ChessGameCtx_t *ctx);
 void ChessBG_Init(void);
 Move_Validation_Flag_e ChessBoard_ValidateMove(const ChessGameCtx_t *ctx);
 Mvmt_Dir_e ChessBoard_MoveGetDir(const ChessBoard_Idx_t move[2]);
+BOOL ChessBoard_FindNextObstruction(const ChessBoard_t board_data,
+                                    const ChessBoard_Idx_t *start,
+                                    ChessBoard_Idx_t *return_obstruction_idx,
+                                    Mvmt_Dir_e dir);
+Knight_Mvmt_Dir_e ChessBoard_KnightMoveGetDir(const ChessBoard_Idx_t *mv,
+                                              Mvmt_Dir_e dir);
+int ChessBoard_KingInCheck(ChessPiece_Data_t **return_pieces,
+                           const ChessPiece_Tracker_t *tracker,
+                           u32 team);
+BOOL ChessBoard_ValidateKingMoveEvadesCheck(
+                                     const ChessGameCtx_t *ctx,
+                                     const ChessPiece_Data_t *checking_pieces,
+                                     u32 checking_piece_ct,
+                                     Move_Validation_Flag_e move_result);
+BOOL ChessBoard_KingMove_EntersCheck(const ChessBoard_t board_data,
+                                     const ChessBoard_Idx_t move[2],
+                                     const ChessPiece_Tracker_t *tracker);
 
+BOOL ChessBoard_ValidateMoveClearance(const ChessBoard_t board_data,
+                                      const ChessBoard_Idx_t move[2],
+                                      Mvmt_Dir_e dir);
 
+Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
+                                     const ChessBoard_t board_data,
+                                     const ChessBoard_Idx_t move[2],
+                                     const ChessPiece_Tracker_t *tracker,
+                                     const PGN_Round_LL_t *mvmt_ll);
 #ifdef __cplusplus
 }
 #endif  /* C++ Name mangler guard */

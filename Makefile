@@ -52,6 +52,7 @@ CXX=$(PREFIX)g++
 LD=$(PREFIX)g++
 AS=$(PREFIX)gcc
 DB=$(PREFIX)gdb
+LLDB=lldb
 OBJ_CPY=$(PREFIX)objcopy
 MGBA="/mnt/c/Program Files/mGBA/mGBA.exe"
 CSTD=-std=c23
@@ -61,8 +62,8 @@ ARCH=-mthumb-interwork -mthumb
 IARCH=-mthumb-interwork -marm
 SPECS=-specs=gba.specs
 
-CFLAGS_BASE=-O2 -Wall -Wextra -fno-strict-aliasing -I$(INC) -I$(LIBINC)
-GCFLAGS_BASE=-g -Wall -Wextra -fno-strict-aliasing -I$(INC) -I$(LIBINC)
+CFLAGS_BASE=-O2 -Wall -Wextra -fno-strict-aliasing -I$(INC) -I$(LIBINC) $(MACROS)
+GCFLAGS_BASE=-g -Wall -Wextra -fno-strict-aliasing -I$(INC) -I$(LIBINC) $(MACROS)
 
 GROM_CFLAGS=$(GCFLAGS_BASE) $(ARCH)
 ROM_CFLAGS=$(CFLAGS_BASE) $(ARCH)
@@ -89,7 +90,8 @@ test: clean build
 
 debug: clean gbuild
 	$(MGBA) -g $(BIN)/$(TARGET).debug.elf &
-	$(DB) $(BIN)/$(TARGET).debug.elf -ex 'target remote $(IP):2345'
+	$(LLDB) -o 'gdb-remote $(IP):2345' --arch armv4t -- $(BIN)/$(TARGET).debug.elf --arch x86_64
+#	$(DB) $(BIN)/$(TARGET).debug.elf -ex 'target remote $(IP):2345'
 
 gbuild: $(IWRAM_SRC) $(SRC) $(BIN) $(TARGET).debug.elf
 
