@@ -81,6 +81,13 @@ void ChessGameCtx_Init(ChessGameCtx_t *ctx) {
   ChessObj_Init_All_Pieces(&(ctx->obj_data), ctx->tracker.piece_graph);
 }
 
+void ChessGameCtx_Close(ChessGameCtx_t *ctx) {
+  Graph_Close(ctx->tracker.piece_graph);
+  PGN_Round_LL_t *rll=&ctx->move_hist;
+  LL_CLOSE(PGN_Round, rll);
+  Fast_Memset32(ctx, 0, sizeof(ChessGameCtx_t)/sizeof(WORD));
+}
+
 void ChessBoard_Init(ChessBoard_t board) {
   Fast_Memset32(board,
                 (EMPTY_IDX<<16)|EMPTY_IDX,
@@ -208,6 +215,8 @@ Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
       ydiff = (spiece&WHITE_FLAGBIT)
                   ? spos.coord.y - epos.coord.y
                   : epos.coord.y - spos.coord.y;
+      if (0>ydiff)
+        return MOVE_UNSUCCESSFUL;
       if (0==xdiff && 2>=ydiff) {
         if (0==ydiff || EMPTY_IDX != (epiece&PIECE_IDX_MASK)) {
           return MOVE_UNSUCCESSFUL;
@@ -297,6 +306,8 @@ Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
       if (0==(popct&1))
         return MOVE_UNSUCCESSFUL;
       if (3==popct) {
+        if (KNIGHT_MVMT_FLAGBIT&dir)
+          return MOVE_UNSUCCESSFUL;
         assert((0!=(DIAGONAL_MVMT_FLAGBIT&dir))
                 &(0!=(dir&HOR_MASK))
                 &(0!=(dir&VER_MASK)));
@@ -404,6 +415,10 @@ BOOL ChessBoard_PieceIsPinned(const ChessBoard_t board_data,
   assert(NULL != allied_king_pdata);
   hyp_move[0] = spos, hyp_move[1] = allied_king_pdata->location;
   start_loc_rel_king = ChessBoard_MoveGetDir(hyp_move);
+  if (INVALID_MVMT_FLAGBIT&start_loc_rel_king)
+    return FALSE;
+  if (!ChessBoard_ValidateMoveClearance(board_data, hyp_move, start_loc_rel_king))
+    return FALSE;
 
   for (size_t i = 0; i < CHESS_TEAM_PIECE_COUNT; ++i) {
     if ((const size_t)i==moving_vert_idx)
@@ -952,6 +967,7 @@ Move_Validation_Flag_e ChessBoard_ValidateCastle(
     allied_roster_ofs = 0;
     opp_roster_ofs = PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT;
   } else {
+    assert(0);
     return MOVE_UNSUCCESSFUL;
   }
   
@@ -967,13 +983,18 @@ Move_Validation_Flag_e ChessBoard_ValidateCastle(
   }
 
   if (FILE_C == move[1].coord.x) {
+    const PGN_Round_LL_Node_t *const LIMIT = WHITE_FLAGBIT&team_flag
+                                                      ? NULL
+                                                      : mvmt_ll->tail;
     if (board_row[FILE_A]!=(ROOK_IDX|team_flag))
       return MOVE_UNSUCCESSFUL;
     for (ChessBoard_File_e fl = FILE_B; fl < FILE_E; ++fl) {
       if (EMPTY_IDX!=(board_row[fl]&PIECE_IDX_MASK))
         return MOVE_UNSUCCESSFUL;
     }
-    for (const PGN_Round_LL_Node_t *cur = mvmt_ll->head; cur; cur = cur->next) {
+    for (const PGN_Round_LL_Node_t *cur = mvmt_ll->head;
+         LIMIT!=cur;
+         cur = cur->next) {
       id = cur->data.moves[pgn_move_idx].roster_id;
       if (ROOK0 == id || KING == id) {
         return MOVE_UNSUCCESSFUL;
@@ -1000,9 +1021,9 @@ Move_Validation_Flag_e ChessBoard_ValidateCastle(
 
 }
 
-#define SINGLE_SQUARE_ATTACKER_MASK 0x0003
-#define PAWN_ATTACKER               0x0001
-#define KING_ATTACKER               0x0002
+#define SINGLE_SQUARE_ATTACKER_MASK       0x0003
+#define PAWN_ATTACKER                     0x0001
+#define KING_ATTACKER                     0x0002
 #define ANY_DIAGONAL_SQUARE_ATTACKER_MASK 0x000C
 #define BISHOP_ATTACKER                   0x0004
 #define QUEEN_ATTACKER                    0x0008
@@ -1019,10 +1040,11 @@ BOOL ChessBoard_ValidateKingMoveEvadesOpp(
   };
   int xdiff, ydiff;
   ChessPiece_e attacking_piece = GET_BOARD_AT_IDX(board_data, auxmove[0]);
-  Mvmt_Dir_e dir;
+  Mvmt_Dir_e attack_dir, move_dir;
 
-  dir = ChessBoard_MoveGetDir(auxmove);
-  if (INVALID_MVMT_FLAGBIT==dir)
+  attack_dir = ChessBoard_MoveGetDir(auxmove);
+  move_dir = ChessBoard_MoveGetDir(move);
+  if (INVALID_MVMT_FLAGBIT==attack_dir)
     return TRUE;
   
   xdiff = auxmove[0].coord.x-auxmove[1].coord.x;
@@ -1039,12 +1061,15 @@ BOOL ChessBoard_ValidateKingMoveEvadesOpp(
     }
     break;
   case BISHOP_IDX:
-    if (!(DIAGONAL_MVMT_FLAGBIT&dir))
+    if (!(DIAGONAL_MVMT_FLAGBIT&attack_dir))
       return TRUE;
   case QUEEN_IDX:
-    if (KNIGHT_MVMT_FLAGBIT&dir)
+    if (KNIGHT_MVMT_FLAGBIT&attack_dir)
       return TRUE;
-    if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, dir))
+    if (move_dir==attack_dir) {
+      return FALSE;
+    }
+    if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, attack_dir))
       return TRUE;
     break;
   case KING_IDX:
@@ -1052,14 +1077,16 @@ BOOL ChessBoard_ValidateKingMoveEvadesOpp(
       return TRUE;
     break;
   case ROOK_IDX:
-    if ((DIAGONAL_MVMT_FLAGBIT|KNIGHT_MVMT_FLAGBIT)&dir)
+    if ((DIAGONAL_MVMT_FLAGBIT|KNIGHT_MVMT_FLAGBIT)&attack_dir)
       return TRUE;
-    assert(1==__builtin_popcount(dir&(HOR_MASK|VER_MASK)));
-    if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, dir))
+    assert(1==__builtin_popcount(attack_dir&(HOR_MASK|VER_MASK)));
+    if (move_dir==attack_dir)
+      return FALSE;
+    if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, attack_dir))
       return TRUE;
     break;
   case KNIGHT_IDX:
-    if (!(KNIGHT_MVMT_FLAGBIT&dir))
+    if (!(KNIGHT_MVMT_FLAGBIT&attack_dir))
       return TRUE;
     break;
   default: 

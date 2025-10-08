@@ -207,6 +207,11 @@ extern "C" {
 #define BG_AFFINE_64x64_BLOCKS      2
 #define BG_AFFINE_128x128_BLOCKS    3
 
+#define TIMER_FREQ_1HZ              0
+#define TIMER_FREQ_64HZ             1
+#define TIMER_FREQ_256HZ            2
+#define TIMER_FREQ_1024HZ           3
+
 
 #ifdef __cplusplus
 }

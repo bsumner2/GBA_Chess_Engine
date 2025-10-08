@@ -8,6 +8,7 @@ endif
 ifeq '$(IP)' ''
 	IP=$(shell ip route show | grep -i default | awk '{print $$3}' )
 endif
+
 #-------------------------------Project Files and Dirs-----------------------------------------------------
 
 TARGET=$(PROJ_NAME)
@@ -51,8 +52,6 @@ CC=$(PREFIX)gcc
 CXX=$(PREFIX)g++
 LD=$(PREFIX)g++
 AS=$(PREFIX)gcc
-DB=$(PREFIX)gdb
-LLDB=lldb
 OBJ_CPY=$(PREFIX)objcopy
 MGBA="/mnt/c/Program Files/mGBA/mGBA.exe"
 CSTD=-std=c23
@@ -63,7 +62,7 @@ IARCH=-mthumb-interwork -marm
 SPECS=-specs=gba.specs
 
 CFLAGS_BASE=-O2 -Wall -Wextra -fno-strict-aliasing -I$(INC) -I$(LIBINC) $(MACROS)
-GCFLAGS_BASE=-g -Wall -Wextra -fno-strict-aliasing -I$(INC) -I$(LIBINC) $(MACROS)
+GCFLAGS_BASE=-g -Wall -Wextra -fno-strict-aliasing -I$(INC) -I$(LIBINC) $(MACROS) -D_DEBUG_BUILD_
 
 GROM_CFLAGS=$(GCFLAGS_BASE) $(ARCH)
 ROM_CFLAGS=$(CFLAGS_BASE) $(ARCH)
@@ -75,8 +74,13 @@ LDFLAGS=$(ARCH) $(SPECS) -L$(LIB) -l$(LIBGBADEV)
 GLDFLAGS=-g $(ARCH) $(SPECS) -L$(LIB) -l$(LIBGBADEV)
 
 ASFLAGS=-xassembler-with-cpp -I$(INC) -I$(LIBINC)
-GASFLAGS=-g -xassembler-with-cpp -I$(INC) -I$(LIBINC)
-
+GASFLAGS=-g -xassembler-with-cpp -I$(INC) -I$(LIBINC) -D_DEBUG_BUILD_
+ifeq '$(DB)' 'lldb'
+	DBFLAGS=-o 'gdb-remote $(IP):2345' --arch armv4t -- $(BIN)/$(TARGET).debug.elf --arch x86_64
+else
+	DB=$(PREFIX)gdb
+	DBFLAGS=$(BIN)/$(TARGET).debug.elf -ex 'target remote $(IP):2345'
+endif
 
 
 .PHONY: build clean
@@ -90,8 +94,7 @@ test: clean build
 
 debug: clean gbuild
 	$(MGBA) -g $(BIN)/$(TARGET).debug.elf &
-	$(LLDB) -o 'gdb-remote $(IP):2345' --arch armv4t -- $(BIN)/$(TARGET).debug.elf --arch x86_64
-#	$(DB) $(BIN)/$(TARGET).debug.elf -ex 'target remote $(IP):2345'
+	$(DB) $(DBFLAGS)
 
 gbuild: $(IWRAM_SRC) $(SRC) $(BIN) $(TARGET).debug.elf
 

@@ -174,6 +174,7 @@ typedef struct s_pgn_move {
   ChessBoard_Idx_t move[2];
   u16 roster_id;
   Move_Validation_Flag_e move_outcome;
+  ChessPiece_e promotion;
 } ALIGN(2) PGN_Move_t;
 typedef struct s_pgn_round {
   PGN_Move_t moves[2];
@@ -193,9 +194,10 @@ typedef struct s_chess_context {
 } __attribute__((aligned(4))) ChessGameCtx_t;
 
 #define WHITE_SQUARE_CLR        0x679D
-//#define BLACK_SQUARE_CLR        0x10A5
+// OTHER COLOR OPTS FOR BLACK SQUARE: 0x10A5
 #define BLACK_SQUARE_CLR        0x2529
-#define BLACK_PIECE_CLR         0x0421
+// OTHER COLOR OPTS FOR BLACK PIECE: 0x0421, 0x2D4D, 0x250B, 0x39B0
+#define BLACK_PIECE_CLR         0x250B
 #define WHITE_PIECE_CLR         0x4A97
 #define VALID_SEL_SQUARE_CLR    0x7F65
 #define INVALID_SEL_SQUARE_CLR  0x31B8
@@ -244,6 +246,8 @@ Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
                                      const ChessBoard_Idx_t move[2],
                                      const ChessPiece_Tracker_t *tracker,
                                      const PGN_Round_LL_t *mvmt_ll);
+
+void ChessGameCtx_Close(ChessGameCtx_t *ctx);
 #ifdef __cplusplus
 }
 #endif  /* C++ Name mangler guard */

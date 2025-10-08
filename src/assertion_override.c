@@ -2,6 +2,7 @@
 #include <GBAdev_types.h>
 #include <GBAdev_memmap.h>
 #ifdef _DEBUG_BUILD_
+#include <stddef.h>
 #define EXIT_PROCEDURE() do continue; while (1)
 #else
 #include <stdlib.h>

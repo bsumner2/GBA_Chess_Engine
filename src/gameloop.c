@@ -28,8 +28,11 @@ extern void IRQ_Sync(u32 flags);
 #define SEL_OAM_IDX_OFS (sizeof(ChessObj_Pieces_t)/sizeof(Obj_Attr_t))
 
 static void ChessGame_UpdateMoveHistory(ChessGameCtx_t *ctx,
-                                        Move_Validation_Flag_e move_outcome);
-static void ChessGame_UpdateBoardAndGraph(ChessGameCtx_t *ctx, 
+                                        Move_Validation_Flag_e move_outcome,
+                                        BOOL promotion_occurred);
+
+static void ChessGame_UpdateBoardAndGraph(ChessGameCtx_t *ctx,
+                                          BOOL *promotion_occurred,
                                           Move_Validation_Flag_e move);
 #ifdef UPDATE_ALL
 static void ChessGame_UpdateVertexEdges(const ChessBoard_t board_data, 
@@ -55,7 +58,7 @@ void ChessGame_AnimateMove(ChessGameCtx_t *ctx,
                            ChessPiece_Data_t *moving,
                            ChessPiece_Data_t *captured);
 #endif
-static void ChessGame_PromotionPrompt(ChessGameCtx_t *ctx);
+static void ChessGame_PromotionPrompt(ChessGameCtx_t *ctx, ChessPiece_Data_t *pawn);
 static BOOL ChessGame_CalculateIfCheckmate(
                                         const ChessGameCtx_t *ctx,
                                         const ChessPiece_Data_t *checking_pcs,
@@ -65,6 +68,18 @@ static BOOL ChessGame_CalculateIfStalemate(const ChessGameCtx_t *ctx);
 static BOOL ChessGame_CheckEscapable(const ChessGameCtx_t *ctx,
                                     const ChessPiece_Data_t *checking_pcs,
                                     int checking_pcs_ct);
+static BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx, 
+                                  const ChessPiece_Data_t *king,
+                                  const ChessPiece_Data_t *prospective_blocker, 
+                                  const ChessPiece_Data_t *checking_piece);
+static BOOL ChessGame_ProspectiveBlockerPinned(const ChessGameCtx_t *ctx, 
+                                               const ChessPiece_Data_t *checker,
+                                               const ChessPiece_Data_t *blocker,
+                                               const ChessPiece_Data_t *king);
+
+static void ChessGame_NotifyInvalidMove(Obj_Attr_t *mvmt, int idx);
+#define ChessGame_NotifyInvalidDest(mvmt) ChessGame_NotifyInvalidMove(mvmt, 1)
+#define ChessGame_NotifyInvalidStart(mvmt) ChessGame_NotifyInvalidMove(mvmt, 0)
 
 INLN void UPDATE_PIECE_SPRITE_LOCATION(Obj_Attr_t *spr_obj, ChessBoard_Idx_t move);
 INLN void Vsync(void);
@@ -74,18 +89,15 @@ static const ChessPiece_e PROMOTION_SEL[] = {
   QUEEN_IDX, ROOK_IDX, BISHOP_IDX, KNIGHT_IDX
 };
 
-void ChessGame_PromotionPrompt(ChessGameCtx_t *ctx) {
+void ChessGame_PromotionPrompt(ChessGameCtx_t *ctx, ChessPiece_Data_t *pawn) {
   const u32 spr_ofs = ctx->whose_turn&WHITE_FLAGBIT
                           ?0:2*TILES_PER_CSPR*Chess_sprites_Glyph_Count;
+  Obj_Attr_t *obj = pawn->obj_ctl;
   ChessBoard_Idx_t *move = ctx->move_selections;
-  int promotion_id=0;
-  Obj_Attr_t tmp = ctx->obj_data.sels[1];
-  tmp.attr0.regular.mode = OBJ_GFX_MODE_NORMAL;
-  tmp.attr2 = (Obj_Attr_Fields2_t){
-    .sprite_idx = PROMOTION_SEL[promotion_id]*2*CSPR_TILES_PER_DIM+spr_ofs,
-    .priority = 0
-  };
-  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+2], &tmp, 1);
+  int promotion_id=0, pawn_id = pawn->roster_id;
+  obj->attr2.sprite_idx = PROMOTION_SEL[promotion_id]*2*CSPR_TILES_PER_DIM+spr_ofs;
+  UPDATE_PIECE_SPRITE_LOCATION(obj, move[1]);
+  OAM_Copy(&OAM_ATTR[pawn_id], obj, 1);
   for (BOOL sel = FALSE, sprchange=TRUE; !sel; 
        sel=(0!=KEY_STROKE(A)), sprchange=TRUE) {
     IRQ_Sync(1<<IRQ_KEYPAD);
@@ -99,12 +111,9 @@ void ChessGame_PromotionPrompt(ChessGameCtx_t *ctx) {
       sprchange = FALSE;
     }
     if (!sprchange) continue;
-    tmp.attr2.sprite_idx = spr_ofs+PROMOTION_SEL[promotion_id]*2*TILES_PER_CSPR;
-    OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+2], &tmp, 1);
+    obj->attr2.sprite_idx = spr_ofs+PROMOTION_SEL[promotion_id]*2*TILES_PER_CSPR;
+    OAM_Copy(&OAM_ATTR[pawn_id], obj, 1);
   }
-  tmp.attr0.regular.disable=TRUE;
-  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+2], &tmp, 1);
-
   ctx->board_data[BOARD_IDX(move[0])]
                     = (ctx->whose_turn|PROMOTION_SEL[promotion_id]);
 }
@@ -173,6 +182,18 @@ Move_Validation_Flag_e ChessGame_GetMove(ChessGameCtx_t *ctx, BOOL retry) {
         }
       }
     }
+    if (0==i) {
+      if (0==(ctx->whose_turn&GET_BOARD_AT_IDX(ctx->board_data, curmove))) {
+        --i;
+        ChessGame_NotifyInvalidStart(sels);
+        curmove.raw=0ULL;
+        if (ctx->whose_turn&WHITE_FLAGBIT) {
+          curmove.coord.y = ROW_1;
+        }
+        UPDATE_PIECE_SPRITE_LOCATION(&sels[0], curmove);
+        continue;
+      }
+    }
     move[i] = curmove;
     if (i)
       continue;
@@ -198,7 +219,8 @@ Move_Validation_Flag_e ChessGame_GetMove(ChessGameCtx_t *ctx, BOOL retry) {
 }
 
 void ChessGame_UpdateMoveHistory(ChessGameCtx_t *ctx,
-                                 Move_Validation_Flag_e move_outcome) {
+                                 Move_Validation_Flag_e move_outcome,
+                                 BOOL promotion_occurred) {
   PGN_Round_t round = {0};
   ChessPiece_Data_t query = {0};
   PGN_Round_LL_t *rll = &ctx->move_hist;
@@ -214,7 +236,10 @@ void ChessGame_UpdateMoveHistory(ChessGameCtx_t *ctx,
         ctx->move_selections[0],
         ctx->move_selections[1]
       },
-      .move_outcome = move_outcome
+      .move_outcome = move_outcome,
+      .promotion = promotion_occurred
+        ? ctx->board_data[BOARD_IDX(ctx->move_selections[1])]
+        : 0
     };
     LL_NODE_APPEND(PGN_Round, rll, round);
   } else {
@@ -225,7 +250,10 @@ void ChessGame_UpdateMoveHistory(ChessGameCtx_t *ctx,
         ctx->move_selections[0],
         ctx->move_selections[1]
       },
-      .move_outcome = move_outcome
+      .move_outcome = move_outcome,
+      .promotion = promotion_occurred
+        ? ctx->board_data[BOARD_IDX(ctx->move_selections[1])]
+        : 0
     };
   }
 }
@@ -918,7 +946,7 @@ void ChessGame_UpdateMovedPieceEdges(const ChessBoard_t board_data,
 }
 #endif
 
-void ChessGame_UpdateBoardAndGraph(ChessGameCtx_t *ctx, Move_Validation_Flag_e move) {
+void ChessGame_UpdateBoardAndGraph(ChessGameCtx_t *ctx, BOOL *promotion_occurred, Move_Validation_Flag_e move) {
   ChessPiece_Data_t query = {0}, 
                     capt_static;  /* Gonna need a static copy for after 
                                      captured piece's vertex is deleted */
@@ -973,8 +1001,8 @@ void ChessGame_UpdateBoardAndGraph(ChessGameCtx_t *ctx, Move_Validation_Flag_e m
     query.location = rook_moves[1];
     assert(Graph_Update_Vertex_Data(pgraph, rook_vert->idx, &query));
     new_rdata = rook_vert->data;
-    assert(RDATA!=new_rdata);
     assert(NULL!=new_rdata);
+    assert(rook_moves[1].raw==new_rdata->location.raw);
     RDATA = NULL;
     capt = new_rdata;
   } else if (MOVE_CAPTURE&move) {
@@ -1008,31 +1036,54 @@ void ChessGame_UpdateBoardAndGraph(ChessGameCtx_t *ctx, Move_Validation_Flag_e m
     capt = &capt_static;
   }
 
-
-  if (PAWN_IDX==(ctx->board_data[BOARD_IDX(mv[0])]&PIECE_IDX_MASK)) {
+  if (PAWN_IDX==(spiece&PIECE_IDX_MASK)) {
+    BOOL promo_occurred = FALSE;
     if (ctx->whose_turn&WHITE_FLAGBIT) {
-      if (ctx->move_selections[1].coord.y==ROW_8)
-        ChessGame_PromotionPrompt(ctx);
+      if (ctx->move_selections[1].coord.y==ROW_8) {
+        promo_occurred = TRUE;
+      }
     } else if (ctx->move_selections[1].coord.y==ROW_1) {
-      ChessGame_PromotionPrompt(ctx);
+      promo_occurred = TRUE;
+    }
+
+    *promotion_occurred = promo_occurred;
+    if (promo_occurred) {
+      moving = (ChessPiece_Data_t*)moving_piece_vertex->data;
+      ChessGame_AnimateMove(ctx, moving, capt, move);
+      ChessGame_PromotionPrompt(ctx, moving);
+      spiece = board[BOARD_IDX(mv[0])];
+      board[BOARD_IDX(mv[0])] = EMPTY_IDX;
+      board[BOARD_IDX(mv[1])] = spiece;
+      query = *moving;
+      query.location = mv[1];
+      assert(Graph_Update_Vertex_Data(pgraph, moving_piece_vertex->idx, &query));
+      /* Update moving to point to vertex's new data. */
+      moving = moving_piece_vertex->data;
+      if (NULL!=capt) {
+        capt_static.obj_ctl->attr0.regular.disable = FALSE;
+        ChessBoard_DrawCapturedTeam(&ctx->obj_data.pieces[0][0], tracker, whose_turn^PIECE_TEAM_MASK);
+      }
+    }
+  } else {
+    *promotion_occurred = FALSE;
+  }
+
+  if (!*promotion_occurred) {
+    board[BOARD_IDX(mv[0])] = EMPTY_IDX;
+    board[BOARD_IDX(mv[1])] = spiece;
+    moving = (ChessPiece_Data_t*)moving_piece_vertex->data;
+    query = *moving;
+    query.location = mv[1];
+    assert(Graph_Update_Vertex_Data(pgraph, moving_piece_vertex->idx, &query));
+    /* Update moving to point to vertex's new data. */
+    moving = moving_piece_vertex->data;
+  
+    ChessGame_AnimateMove(ctx, moving, capt, move);
+    if (NULL!=capt && 0==(move&MOVE_CASTLE_MOVE_FLAGS_MASK)) {
+      capt_static.obj_ctl->attr0.regular.disable = FALSE;
+      ChessBoard_DrawCapturedTeam(&ctx->obj_data.pieces[0][0], tracker, whose_turn^PIECE_TEAM_MASK);
     }
   }
-
-  board[BOARD_IDX(mv[0])] = EMPTY_IDX;
-  board[BOARD_IDX(mv[1])] = spiece;
-  moving = (ChessPiece_Data_t*)moving_piece_vertex->data;
-  query = *moving;
-  query.location = mv[1];
-  assert(Graph_Update_Vertex_Data(pgraph, moving_piece_vertex->idx, &query));
-  /* Update moving to point to vertex's new data. */
-  moving = moving_piece_vertex->data;
-  
-  ChessGame_AnimateMove(ctx, moving, capt, move);
-  if (NULL!=capt && 0==(move&MOVE_CASTLE_MOVE_FLAGS_MASK)) {
-    capt_static.obj_ctl->attr0.regular.disable = FALSE;
-    ChessBoard_DrawCapturedTeam(&ctx->obj_data.pieces[0][0], tracker, whose_turn^PIECE_TEAM_MASK);
-  }
-
   ctx->obj_data.sels[0].attr0.regular.disable = TRUE;
   ctx->obj_data.sels[1].attr0.regular.disable = TRUE;
   OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS], ctx->obj_data.sels, 2);
@@ -1059,18 +1110,42 @@ void ChessGame_UpdateBoardAndGraph(ChessGameCtx_t *ctx, Move_Validation_Flag_e m
 }
 
 
-void ChessGame_NotifyInvalidMove(Obj_Attr_t *mvmt) {
-  mvmt[1].attr2.sprite_idx += TILES_PER_CSPR*2*Chess_sprites_Glyph_Count;
-  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+1], &mvmt[1], 1);
-  for (int i = 0,j; i < 6; ++i) {
-    for (j=0; j < 15; ++j)
-      Vsync();
-    mvmt[1].attr0.regular.disable^=TRUE;
-    OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+1], &mvmt[1], 1);
-  }
+void ChessGame_NotifyInvalidMove(Obj_Attr_t *mvmt, int idx) {
+  mvmt = &mvmt[idx];
+  mvmt->attr2.sprite_idx += TILES_PER_CSPR*2*Chess_sprites_Glyph_Count;
+  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+idx], mvmt, 1);
 
-  mvmt[1].attr2.sprite_idx -= TILES_PER_CSPR*2*Chess_sprites_Glyph_Count;
-  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+1], &mvmt[1], 1);
+  Timer_Handle_t timer_control = {
+    .cnt_reg = {
+      .fields = {
+        .freq=TIMER_FREQ_1024HZ,
+        .enable = FALSE,
+        .cascade_mode = FALSE,
+        .interrupt_upon_completion = TRUE,
+      }
+    },
+    .data = 0xFF00
+  };
+
+  REG_TM[0] = timer_control;
+  u16 enable_bit = ((Timer_Cnt_t){.fields={.enable=TRUE}}).raw;
+  REG_IME = 0;
+  REG_IE |= 1<<IRQ_TIMER0;
+  REG_IME = 1;
+  for (int i = 0,j; i < 6; ++i) {
+    for (j=0; j < 5; ++j) {
+      REG_TM[0].cnt_reg.raw |= enable_bit;
+      IRQ_Sync(1<<IRQ_TIMER0);
+      REG_TM[0] = timer_control;
+    }
+    mvmt->attr0.regular.disable^=TRUE;
+    OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+idx], mvmt, 1);
+  }
+  REG_IME = 0;
+  REG_IE ^= 1<<IRQ_TIMER0;
+  REG_IME = 1;
+  mvmt->attr2.sprite_idx -= TILES_PER_CSPR*2*Chess_sprites_Glyph_Count;
+  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+idx], mvmt, 1);
 }
 
 u32 ChessGameLoop(ChessGameCtx_t *ctx) {
@@ -1078,16 +1153,17 @@ u32 ChessGameLoop(ChessGameCtx_t *ctx) {
   ChessPiece_Data_t *checking_pcs = NULL;
   int checking_pcs_ct;
   Move_Validation_Flag_e move;
+  BOOL promotion_occurred;
   while (Vsync(), !ret) {
     for (move = ChessGame_GetMove(ctx, FALSE)
           ; ;
          move = ChessGame_GetMove(ctx, TRUE)) {
       if (MOVE_SUCCESSFUL&move)
         break;
-      ChessGame_NotifyInvalidMove(ctx->obj_data.sels);
+      ChessGame_NotifyInvalidDest(ctx->obj_data.sels);
     }
-    ChessGame_UpdateBoardAndGraph(ctx, move);
-    ChessGame_UpdateMoveHistory(ctx, move);
+    ChessGame_UpdateBoardAndGraph(ctx, &promotion_occurred, move);
+    ChessGame_UpdateMoveHistory(ctx, move, promotion_occurred);
     checking_pcs_ct = ChessBoard_KingInCheck(&checking_pcs,
         &ctx->tracker,
         ctx->whose_turn^PIECE_TEAM_MASK);
@@ -1142,7 +1218,7 @@ void ChessGame_AnimateMove(ChessGameCtx_t *ctx,
     Obj_Attr_t * const KING_OAM_OFS = MOVING_OAM_OFS,
                * const ROOK_OAM_OFS = OAM_ATTR+captured->roster_id;
     Obj_Attr_t *robj = captured->obj_ctl;
-    if (dir&MOVE_CASTLE_QUEENSIDE) {
+    if (special_flags&MOVE_CASTLE_QUEENSIDE) {
       assert(ROOK0==(captured->roster_id&PIECE_ROSTER_ID_MASK));
       for (u32 xoff = 0; (3*Chess_sprites_Glyph_Width)>xoff; xoff+=5) {
         if ((2*Chess_sprites_Glyph_Width)>xoff) {
@@ -1236,12 +1312,17 @@ BOOL ChessGame_CalculateIfCheckmate(const ChessGameCtx_t *ctx,
   if (1==checking_pcs_ct) {
     const ChessPiece_Roster_t ROSTER = ctx->tracker.roster;
     const Graph_t *GRAPH = ctx->tracker.piece_graph;
-    u32 allied_ofs = ctx->whose_turn&WHITE_FLAGBIT 
+    const u32 allied_ofs = ctx->whose_turn&WHITE_FLAGBIT 
                     ? 0
                     : PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT,
       checking_piece_rid = checking_pcs->roster_id;
-    if (Graph_Has_Edge(GRAPH, KING|allied_ofs, checking_piece_rid)) {
-      if (!ChessBoard_KingMove_EntersCheck (ctx->board_data,
+    const ChessPiece_Data_t *king =GRAPH->vertices[KING|allied_ofs].data;
+
+    const ChessPiece_e CHECKER = GET_BOARD_AT_IDX(ctx->board_data, 
+                                                  checking_pcs->location),
+          CHECKER_TYPE = CHECKER&PIECE_IDX_MASK;
+    if (Graph_Has_Edge(GRAPH, king->roster_id, checking_piece_rid)) {
+      if (!ChessBoard_KingMove_EntersCheck(ctx->board_data,
             (ChessBoard_Idx_t[2]) {
               ((ChessPiece_Data_t*)GRAPH->vertices[KING|allied_ofs].data)
                                                                 ->location,
@@ -1258,9 +1339,18 @@ BOOL ChessGame_CalculateIfCheckmate(const ChessGameCtx_t *ctx,
       if (Graph_Has_Edge(GRAPH, i|allied_ofs, checking_piece_rid)) {
         return FALSE;
       }
+      if (PAWN_IDX==CHECKER_TYPE || KNIGHT_IDX==CHECKER_TYPE)
+        continue;
+      if (ChessGame_PieceCanBlock(ctx,
+                                  king,
+                                  GRAPH->vertices[i|allied_ofs].data,
+                                  checking_pcs)) {
+        return FALSE;
+      }
+
     }
   }
-  return ChessGame_CheckEscapable(ctx, checking_pcs, checking_pcs_ct);
+  return !ChessGame_CheckEscapable(ctx, checking_pcs, checking_pcs_ct);
 }
 
 BOOL ChessGame_CheckEscapable(const ChessGameCtx_t *ctx,
@@ -1272,35 +1362,80 @@ BOOL ChessGame_CheckEscapable(const ChessGameCtx_t *ctx,
   ChessGameCtx_t ctx_copy = *ctx;
   const ChessBoard_Idx_t ORIGIN 
     = ((const ChessPiece_Data_t*)(king_node->data))->location;
-  ChessBoard_Idx_t idx;
   Move_Validation_Flag_e hypothetical_mv_flag;
   ctx_copy.whose_turn^=PIECE_TEAM_MASK;
   ctx_copy.move_selections[0] = ORIGIN;
-
-  for (int di, i, j = -1; 2 > j; ++j, idx.coord.y=ORIGIN.coord.y) {
-    idx.coord.y += j;
-    if (0UL!=(idx.coord.y&~7UL))
-      continue;
-    di = 0==j ? 2 : 1;
-    for (i=-1; 2 > i; i+=di, idx.coord.x=ORIGIN.coord.x) {
-      idx.coord.x+=i;
-      if (0UL!=(idx.coord.x&~7UL))
-        continue;
-      ctx_copy.move_selections[1] = idx;
-      hypothetical_mv_flag = ChessBoard_ValidateMoveLegality(
-                                                      ctx_copy.board_data,
-                                                      ctx_copy.move_selections,
-                                                      &ctx_copy.tracker,
-                                                      &ctx_copy.move_hist);
-      assert(MOVE_UNSUCCESSFUL!=hypothetical_mv_flag);
-      if (!ChessBoard_ValidateKingMoveEvadesCheck(&ctx_copy, checking_pcs,
-          checking_pcs_ct, hypothetical_mv_flag))
-        continue;
-      if (!ChessBoard_KingMove_EntersCheck(ctx_copy.board_data, ctx_copy.move_selections, &ctx_copy.tracker))
-        return FALSE;
+  ChessBoard_Idx_t valid_mvs[8];
+  Fast_Memset32(valid_mvs, 
+                0xFFFFFFFFUL,
+                sizeof(ChessBoard_Idx_t[8]) / sizeof(WORD));
+  BOOL can_left=FILE_A < ORIGIN.coord.x,
+       can_right = FILE_H > ORIGIN.coord.x,
+       can_up = ROW_8 < ORIGIN.coord.y,
+       can_down = ROW_1 > ORIGIN.coord.y;
+  if (can_left) {
+    valid_mvs[3] = ORIGIN;
+    --valid_mvs[3].coord.x;
+    if (can_up) {
+      valid_mvs[0] = valid_mvs[3];
+      --valid_mvs[0].coord.y;
+    }
+    if (can_down) {
+      valid_mvs[5] = valid_mvs[3];
+      ++valid_mvs[5].coord.y;
     }
   }
-  return TRUE;
+  if (can_right) {
+    valid_mvs[4] = ORIGIN;
+    ++valid_mvs[4].coord.x;
+    if (can_up) {
+      valid_mvs[2] = valid_mvs[4];
+      --valid_mvs[2].coord.y;
+    }
+    if (can_down) {
+      valid_mvs[7] = valid_mvs[4];
+      ++valid_mvs[7].coord.y;
+    }
+  }
+  if (can_up) {
+    valid_mvs[1] = ORIGIN;
+    --valid_mvs[1].coord.y;
+  }
+  if (can_down) {
+    valid_mvs[6] = ORIGIN;
+    ++valid_mvs[6].coord.y;
+  }
+  u64 cur;
+  for (int  i =0; i < 8; ++i) {
+    cur = valid_mvs[i].raw;
+    if (0ULL!=(0xFFFFFFF8FFFFFFF8ULL&cur))
+      continue;
+    ctx_copy.move_selections[1].raw = cur;
+    hypothetical_mv_flag = ChessBoard_ValidateMoveLegality(
+                                                    ctx_copy.board_data,
+                                                    ctx_copy.move_selections,
+                                                    &ctx_copy.tracker,
+                                                    &ctx_copy.move_hist);
+    assert(MOVE_UNSUCCESSFUL!=hypothetical_mv_flag);
+    if (MOVE_CAPTURE&hypothetical_mv_flag) {
+      ChessPiece_e start_pc= GET_BOARD_AT_IDX(ctx_copy.board_data, 
+                                     ctx_copy.move_selections[0]),
+                     end_pc= GET_BOARD_AT_IDX(ctx_copy.board_data, 
+                                     ctx_copy.move_selections[1]);
+      // Since ChessBoard_ValidateMoveLegality only checks move direction
+      // is legal, and not whether the square we're moving to is occupied
+      // by a teammate, we still need 2 check that here.
+      if ((start_pc&PIECE_TEAM_MASK) == (end_pc&PIECE_TEAM_MASK))
+        continue;
+
+    }
+    if (!ChessBoard_ValidateKingMoveEvadesCheck(&ctx_copy, checking_pcs,
+        checking_pcs_ct, hypothetical_mv_flag))
+      continue;
+    if (!ChessBoard_KingMove_EntersCheck(ctx_copy.board_data, ctx_copy.move_selections, &ctx_copy.tracker))
+      return TRUE;
+  }
+  return FALSE;
 
 }
 
@@ -1361,6 +1496,38 @@ BOOL ChessGame_PiecePinned(const ChessGameCtx_t *ctx,
     return TRUE;
   }
   return FALSE;
+}
+
+BOOL ChessGame_ProspectiveBlockerPinned(const ChessGameCtx_t *ctx, 
+                                        const ChessPiece_Data_t *checker,
+                                        const ChessPiece_Data_t *blocker,
+                                        const ChessPiece_Data_t *king) {
+  const Graph_t *graph = ctx->tracker.piece_graph;
+  ChessBoard_Idx_t auxmove[2] = {blocker->location, king->location},
+                   auxmove2[2] = {{0}, blocker->location};
+  Mvmt_Dir_e dir = ChessBoard_MoveGetDir(auxmove);
+  if (KNIGHT_MVMT_FLAGBIT&dir)
+    return FALSE;
+  if (INVALID_MVMT_FLAGBIT==dir)
+    return FALSE;
+  if (!ChessBoard_ValidateMoveClearance(ctx->board_data, auxmove, dir))
+    return FALSE;
+  for (u32 ofs=(blocker->roster_id&~15)^PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT, i=0,
+           blocker_id = blocker->roster_id;
+       CHESS_TEAM_PIECE_COUNT > i;
+       ++i) {
+    if (Graph_Has_Edge(graph, i|ofs, blocker_id)) {
+      auxmove2[0] = ((ChessPiece_Data_t*)graph->vertices[i|ofs].data)->location;
+      if (ChessBoard_MoveGetDir(auxmove2)==dir) {
+        if (ChessBoard_ValidateMoveClearance(ctx->board_data, auxmove2, dir))
+          return TRUE;
+      }
+
+    }
+      
+  }
+  return FALSE;
+
 }
 
 BOOL ChessGame_ValidateHasLegalMove(const ChessGameCtx_t *ctx,
@@ -1678,3 +1845,373 @@ BOOL ChessGame_CalculateIfStalemate(const ChessGameCtx_t *ctx) {
   }
   return TRUE;
 }
+
+static BOOL ChessGame_PawnCanDoubleForward(const ChessGameCtx_t *ctx,
+                                           const ChessPiece_Data_t *pawn) {
+  const PGN_Round_LL_Node_t *cur = ctx->move_hist.head;
+  int rid = pawn->roster_id;
+  int mv_idx = (rid&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT
+                  ? 0
+                  : 1);
+  rid&=PIECE_ROSTER_ID_MASK;
+  for (;NULL!=cur;cur=cur->next) {
+    if (rid!=cur->data.moves[mv_idx].roster_id)
+      continue;
+    return FALSE;
+  }
+
+  ChessBoard_Idx_t idx = pawn->location;
+  if (pawn->roster_id&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT) {
+    --idx.coord.y;
+    assert(ROW_3==idx.coord.y);
+  } else {
+    ++idx.coord.y;
+    assert(ROW_6==idx.coord.y);
+  }
+  if (EMPTY_IDX!=GET_BOARD_AT_IDX(ctx->board_data, idx))
+    return FALSE;
+  if (ROW_3==idx.coord.y) {
+    --idx.coord.y;
+    assert(ROW_4==idx.coord.y);
+  } else {
+    ++idx.coord.y;
+    assert(ROW_5==idx.coord.y);
+  }
+  if (EMPTY_IDX!=GET_BOARD_AT_IDX(ctx->board_data, idx))
+    return FALSE;
+  return TRUE;
+}
+
+#define ADVANCE_ATTACK_RAY(_coord, dx, dy)\
+  _coord.coord = (struct s_chess_coord){\
+    .x = _coord.coord.x+dx,\
+    .y=_coord.coord.y+dy\
+  }
+BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx, 
+                             const ChessPiece_Data_t *king,
+                             const ChessPiece_Data_t *prospective_blocker, 
+                             const ChessPiece_Data_t *checking_piece) { 
+  Mvmt_Dir_e mvmts[8] = {
+    INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, 
+    INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, 
+    INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT
+  };
+  const ChessBoard_Row_t *board_data = ctx->board_data;
+  const ChessBoard_Idx_t ORIGIN = prospective_blocker->location;
+  u32 ally_flag,
+      opp_flag;
+  i32 check_slope, check_b; 
+  
+  ChessPiece_e mpiece;
+  Mvmt_Dir_e checking_dir = ChessBoard_MoveGetDir((
+                                ChessBoard_Idx_t[2]){
+                                  checking_piece->location, 
+                                  king->location
+                                }), block_dir;
+  if (DIAGONAL_MVMT_FLAGBIT&checking_dir) {
+    BOOL pos = !((DOWN_FLAGBIT==(VER_MASK&checking_dir)) 
+                    ^ (RIGHT_FLAGBIT==(HOR_MASK&checking_dir)));
+    check_slope = pos ? 1 : -1;
+    check_b = checking_piece->location.coord.y - check_slope*checking_piece->location.coord.x;
+  } else {
+    assert((0!=(VER_MASK&checking_dir)) ^ (0!=(HOR_MASK&checking_dir)));
+    if (VER_MASK&checking_dir) {
+      check_slope = 0x80000000UL;
+      check_b=0;
+    } else {
+      check_slope = 0;
+      check_b = checking_piece->location.coord.y;
+    }
+  }
+  mpiece = GET_BOARD_AT_IDX(board_data, ORIGIN);
+  ally_flag = mpiece&PIECE_TEAM_MASK,
+  opp_flag  = ally_flag^PIECE_TEAM_MASK;
+  int ct = 0;
+  switch (mpiece&PIECE_IDX_MASK) {
+  case PAWN_IDX:
+  {
+#if 0
+    if (WHITE_FLAGBIT==ally_flag) {
+      block_dir = UP_FLAGBIT;
+    } else {
+      block_dir = DOWN_FLAGBIT;
+    }
+    if (!(checking_dir&HOR_MASK))
+      return FALSE;
+    if (checking_dir&RIGHT_FLAGBIT) {
+      if (checking_piece->location.coord.x 
+          > prospective_blocker->location.coord.x)
+        return FALSE;
+      if (king->location.coord.x < prospective_blocker->location.coord.x)
+        return FALSE;
+    } else {
+      if (checking_piece->location.coord.x < prospective_blocker->location.coord.x)
+        return FALSE;
+      if (king->location.coord.x > prospective_blocker->location.coord.x)
+        return FALSE;
+    }
+    int diff;
+    if (checking_dir&DIAGONAL_MVMT_FLAGBIT) {
+      ChessBoard_Row_e intercepting_row = prospective_blocker->location.coord.x*check_slope+check_b;
+      diff = intercepting_row-prospective_blocker->location.coord.y;
+    } else {
+      diff = king->location.coord.y - prospective_blocker->location.coord.y;
+    }
+      
+    if (DOWN_FLAGBIT==block_dir) {
+      if (0 > diff)
+        return FALSE;
+    } else {
+      assert(UP_FLAGBIT==block_dir);
+      if (0 < diff)
+        return FALSE;
+      diff = ABS(diff,32);
+    }
+    if (2 < diff)
+      return FALSE;
+    if (2 > diff)
+      return TRUE;
+    assert(2==diff);
+    if (ChessGame_PawnCanDoubleForward(ctx, prospective_blocker)) {
+      ChessBoard_Idx_t idx = prospective_blocker->location;
+      if (UP_FLAGBIT==block_dir) {
+        --idx.coord.y;
+      } else {
+        ++idx.coord.y;
+      }
+      if (EMPTY_IDX==GET_BOARD_AT_IDX(ctx->board_data,idx))
+      return TRUE;
+    }
+    return FALSE;
+#else
+    ChessBoard_Idx_t idxs[2], 
+                     auxmove[2] = {{0}, king->location},
+                     auxmove2[2] = {checking_piece->location, {0}};
+    bool valids[2];
+    if (ChessGame_PawnCanDoubleForward(ctx, prospective_blocker)) {
+      valids[0] = TRUE;
+      valids[1] = TRUE;
+      idxs[0] = idxs[1] = ORIGIN;
+      if (mpiece&WHITE_FLAGBIT) {
+        --idxs[0].coord.y;
+        idxs[1].coord.y-=2;
+      } else {
+        ++idxs[0].coord.y;
+        idxs[1].coord.y+=2;
+      }
+    } else {
+      valids[1] = FALSE;
+      idxs[0] = ORIGIN;
+      if (mpiece&WHITE_FLAGBIT) {
+        --idxs[0].coord.y;
+      } else {
+        ++idxs[0].coord.y;
+      }
+      if (EMPTY_IDX==GET_BOARD_AT_IDX(ctx->board_data, idxs[0])) {
+        valids[0] = TRUE;
+      } else {
+        valids[0] = FALSE;
+      }
+    }
+
+    for (int i = 0; 2>i;++i) {
+      if (!valids[i])
+        continue;
+      auxmove[0] = idxs[i];
+      if (ChessBoard_MoveGetDir(auxmove)!=checking_dir)
+        continue;
+      auxmove2[1] = idxs[i];
+      if (ChessBoard_MoveGetDir(auxmove2)!=checking_dir)
+        continue;
+      if (ChessBoard_ValidateMoveClearance(ctx->board_data, auxmove2, checking_dir))
+        return TRUE;  
+    }
+    return FALSE;
+#endif
+  }
+  break;
+  case BISHOP_IDX: 
+    if (FILE_A < ORIGIN.coord.x) {
+      if (ROW_8 < ORIGIN.coord.y) {
+        mvmts[0] = UP_FLAGBIT|LEFT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+      if (ROW_1 > ORIGIN.coord.y) {
+        mvmts[1] = DOWN_FLAGBIT|LEFT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+    }
+    if (FILE_H > ORIGIN.coord.x) {
+      if (ROW_8 < ORIGIN.coord.y) {
+        mvmts[2] = UP_FLAGBIT|RIGHT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+      if (ROW_1 > ORIGIN.coord.y) {
+        mvmts[3] = DOWN_FLAGBIT|RIGHT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+    }
+    ct = 4;
+    break;
+  case ROOK_IDX:
+    {
+      if (FILE_A < ORIGIN.coord.x) {
+        mvmts[0] = LEFT_FLAGBIT;
+      }
+      if (FILE_H > ORIGIN.coord.x) {
+        mvmts[1] = RIGHT_FLAGBIT;
+      }
+      if (ROW_8 < ORIGIN.coord.y) {
+        mvmts[2] = UP_FLAGBIT;
+      }
+      if (ROW_1 > ORIGIN.coord.y) {
+        mvmts[3] = DOWN_FLAGBIT;
+      }
+    }
+    ct = 4;
+    break;
+  case KNIGHT_IDX:
+    {
+      ChessBoard_Idx_t idxs[8];
+      bool valid[8] = {0};
+      if (FILE_A < ORIGIN.coord.x) {
+        if (ROW_7 < ORIGIN.coord.y) {
+          idxs[0].coord = (struct s_chess_coord){
+            .x = ORIGIN.coord.x-1,
+            .y = ORIGIN.coord.y-2
+          };
+          valid[0] = TRUE;
+        }
+        if (FILE_B < ORIGIN.coord.x) {
+          if (ROW_8 < ORIGIN.coord.y) {
+            idxs[1].coord = (struct s_chess_coord){
+              .x=ORIGIN.coord.x-2,
+              .y=ORIGIN.coord.y-1
+            };
+            valid[1] = TRUE;
+          }
+          if (ROW_1 > ORIGIN.coord.y) {
+            idxs[2].coord = (struct s_chess_coord){
+              .x = ORIGIN.coord.x-2,
+              .y = ORIGIN.coord.y+1
+            };
+            valid[2] = TRUE;
+          }
+        }
+        if (ROW_2 > ORIGIN.coord.y) {
+          idxs[3].coord = (struct s_chess_coord){
+            .x = ORIGIN.coord.x-1,
+            .y = ORIGIN.coord.y+2
+          };
+          valid[3] = TRUE;
+        }
+      }
+      if (FILE_H > ORIGIN.coord.x) {
+        if (ROW_7 < ORIGIN.coord.y) {
+          idxs[4].coord = (struct s_chess_coord){
+            .x = ORIGIN.coord.x+1,
+            .y = ORIGIN.coord.y-2
+          };
+          valid[4] = TRUE;
+        }
+        if (FILE_G > ORIGIN.coord.x) {
+          if (ROW_8 < ORIGIN.coord.y) {
+            idxs[5].coord = (struct s_chess_coord){
+              .x = ORIGIN.coord.x+2,
+              .y = ORIGIN.coord.y-1
+            };
+            valid[5] = TRUE;
+          }
+          if (ROW_1 > ORIGIN.coord.y) {
+            idxs[6].coord = (struct s_chess_coord){
+              .x = ORIGIN.coord.x+2,
+              .y = ORIGIN.coord.y+1
+            };
+            valid[6] = TRUE;
+          }
+        }
+        if (ROW_2 > ORIGIN.coord.y) {
+          idxs[7].coord = (struct s_chess_coord){
+            .x = ORIGIN.coord.x+1,
+            .y = ORIGIN.coord.y+2
+          };
+          valid[7] = TRUE;
+        }
+      }
+      for (int i = 0; i < 8; ++i) {
+        if (!valid[i])
+          continue;
+        block_dir = ChessBoard_MoveGetDir((ChessBoard_Idx_t[2]){
+              idxs[i], king->location 
+            });
+        if (checking_dir==block_dir)
+          return TRUE;
+          
+      }
+    }
+    return FALSE;
+    break;
+  case QUEEN_IDX:
+    if (FILE_A < ORIGIN.coord.x) {
+      mvmts[0] = LEFT_FLAGBIT;
+      mvmts[1] |= LEFT_FLAGBIT;
+      mvmts[2] |= LEFT_FLAGBIT;
+    }
+    if (FILE_H > ORIGIN.coord.x) {
+      mvmts[3] = RIGHT_FLAGBIT;
+      mvmts[4] |= RIGHT_FLAGBIT;
+      mvmts[5] |= RIGHT_FLAGBIT;
+    }
+    if (ROW_8 < ORIGIN.coord.y) {
+      mvmts[6] = UP_FLAGBIT;
+      mvmts[1] |= UP_FLAGBIT;
+      mvmts[4] |= UP_FLAGBIT;
+    }
+    if (ROW_1 > ORIGIN.coord.y) {
+      mvmts[7] = DOWN_FLAGBIT;
+      mvmts[2] |= DOWN_FLAGBIT;
+      mvmts[5] |= DOWN_FLAGBIT;
+    }
+    {
+      Mvmt_Dir_e curmv;
+      for (int i = 0, j; 6 > i; i+=3) {
+        for (j = 1; 3 > j; ++j) {
+          curmv = mvmts[i+j];
+          if ((curmv&HOR_MASK) && (curmv&VER_MASK)) {
+            mvmts[i+j]^=(DIAGONAL_MVMT_FLAGBIT|INVALID_MVMT_FLAGBIT);
+          }
+        }
+      }
+    }
+    ct = 8;
+    break;
+  default: assert(0);
+  }
+  assert(0!=ct && 8 >= ct);
+  Mvmt_Dir_e curmv;
+  ChessBoard_Idx_t auxmove[2] = {{0}, king->location}, auxmove2[2];
+  ChessBoard_Idx_t lim;
+  int dx, dy;
+  for (int i = 0; ct > i; ++i) {
+    curmv = mvmts[i];
+    if (curmv&INVALID_MVMT_FLAGBIT)
+      continue;
+    dx = curmv&RIGHT_FLAGBIT?1:(curmv&LEFT_FLAGBIT?-1:0);
+    dy = curmv&DOWN_FLAGBIT?1:(curmv&UP_FLAGBIT?-1:0);
+    auxmove[0] = ORIGIN;
+    ChessBoard_FindNextObstruction(ctx->board_data, &auxmove[0], &lim, curmv);
+    if ((const u64)lim.raw==auxmove[0].raw)
+      continue;
+    for (ADVANCE_ATTACK_RAY(auxmove[0], dx, dy); 
+         (const u64)lim.raw!=auxmove[0].raw; 
+         ADVANCE_ATTACK_RAY(auxmove[0], dx, dy)) {
+      block_dir = ChessBoard_MoveGetDir(auxmove);
+      if (block_dir!=checking_dir)
+        continue;
+      auxmove2[0] = checking_piece->location;
+      auxmove2[1] = auxmove[0];
+      if (block_dir != ChessBoard_MoveGetDir(auxmove2))
+        break;
+      if (ChessBoard_ValidateMoveClearance(ctx->board_data, auxmove2, block_dir))
+        return TRUE;
+    }
+  }
+  return FALSE;
+}
+
