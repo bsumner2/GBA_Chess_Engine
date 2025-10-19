@@ -3,7 +3,6 @@
 #include <GBAdev_memdef.h>
 #include <GBAdev_memmap.h>
 #include <GBAdev_util_macros.h>
-#include <iso646.h>
 #include <stdlib.h>
 #include "graph.h"
 #include "key_status.h"
@@ -85,10 +84,7 @@ INLN void UPDATE_PIECE_SPRITE_LOCATION(Obj_Attr_t *spr_obj, ChessBoard_Idx_t mov
 INLN void Vsync(void);
 
 #define PROMOTION_SEL_MASK 3
-static const ChessPiece_e PROMOTION_SEL[] = {
-  QUEEN_IDX, ROOK_IDX, BISHOP_IDX, KNIGHT_IDX
-};
-
+extern const ChessPiece_e PROMOTION_SEL[4];
 void ChessGame_PromotionPrompt(ChessGameCtx_t *ctx, ChessPiece_Data_t *pawn) {
   const u32 spr_ofs = ctx->whose_turn&WHITE_FLAGBIT
                           ?0:2*TILES_PER_CSPR*Chess_sprites_Glyph_Count;
@@ -1366,9 +1362,10 @@ BOOL ChessGame_CheckEscapable(const ChessGameCtx_t *ctx,
   ctx_copy.whose_turn^=PIECE_TEAM_MASK;
   ctx_copy.move_selections[0] = ORIGIN;
   ChessBoard_Idx_t valid_mvs[8];
+
   Fast_Memset32(valid_mvs, 
                 0xFFFFFFFFUL,
-                sizeof(ChessBoard_Idx_t[8]) / sizeof(WORD));
+                sizeof(ChessBoard_Idx_t[8])/sizeof(WORD));
   BOOL can_left=FILE_A < ORIGIN.coord.x,
        can_right = FILE_H > ORIGIN.coord.x,
        can_up = ROW_8 < ORIGIN.coord.y,
@@ -1900,7 +1897,6 @@ BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx,
   const ChessBoard_Idx_t ORIGIN = prospective_blocker->location;
   u32 ally_flag,
       opp_flag;
-  i32 check_slope, check_b; 
   
   ChessPiece_e mpiece;
   Mvmt_Dir_e checking_dir = ChessBoard_MoveGetDir((
@@ -1908,20 +1904,8 @@ BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx,
                                   checking_piece->location, 
                                   king->location
                                 }), block_dir;
-  if (DIAGONAL_MVMT_FLAGBIT&checking_dir) {
-    BOOL pos = !((DOWN_FLAGBIT==(VER_MASK&checking_dir)) 
-                    ^ (RIGHT_FLAGBIT==(HOR_MASK&checking_dir)));
-    check_slope = pos ? 1 : -1;
-    check_b = checking_piece->location.coord.y - check_slope*checking_piece->location.coord.x;
-  } else {
+  if (!(DIAGONAL_MVMT_FLAGBIT&checking_dir)) {
     assert((0!=(VER_MASK&checking_dir)) ^ (0!=(HOR_MASK&checking_dir)));
-    if (VER_MASK&checking_dir) {
-      check_slope = 0x80000000UL;
-      check_b=0;
-    } else {
-      check_slope = 0;
-      check_b = checking_piece->location.coord.y;
-    }
   }
   mpiece = GET_BOARD_AT_IDX(board_data, ORIGIN);
   ally_flag = mpiece&PIECE_TEAM_MASK,

@@ -1,12 +1,18 @@
 ---
 CompileFlags:
-  Add: [ -xc, -std=c23, -Wall, -Wextra, -Wno-empty-translation-unit,  -pedantic, -I../include, -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include]
+  Add: [ -xc, -std=c23, -Wall, -Wextra, -Wno-empty-translation-unit, 
+    -Wno-unknown-attributes, -pedantic, -I../include, 
+    -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include
+  ]
   Compiler: arm-none-eabi-gcc
 ---
 If:
   PathMatch: [.*\.hpp, .*\.cpp, .*\.cc ]
 
 CompileFlags:
-  Add: [ -xc++, -std=c++23, -Wall, -Wextra, -Wnoempty-translation-unit, -pedantic, -I../include, -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include ]
+  Add: [ -xc++, -std=c++23, -Wall, -Wextra, -Wno-empty-translation-unit, 
+        -Wno-unknown-attributes, -pedantic, -I../include, 
+        -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include 
+  ]
   Compiler: arm-none-eabi-g++
 ---

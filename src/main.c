@@ -21,6 +21,15 @@ extern void ChessGame_AnimateMove(ChessGameCtx_t *ctx,
                                   ChessPiece_Data_t *moving,
                                   ChessPiece_Data_t *captured);
 #endif
+#define STALEMATE_MSG "Stalemate!"
+#define WHITE_WIN_MSG "White Wins!"
+#define BLACK_WIN_MSG "Black Wins!"
+
+
+/** LSTRLEN has to be sizeof(literal)-1 because size of string literal includes
+ * the null terminator char at end of string buffer.
+ **/
+#define LSTRLEN(literal) (sizeof(literal)-1)
 
 int main(void) {
 #ifdef TEST_KNIGHT_MVMT
@@ -96,11 +105,23 @@ int main(void) {
     Fast_Memset32(VRAM_M3, 0, sizeof(u16)*M3_SCREEN_HEIGHT*M3_SCREEN_WIDTH/sizeof(WORD));
     REG_DPY_CNT = REG_VALUE(DPY_CNT, MODE, 3)|REG_FLAG(DPY_CNT, BG2);
     if (WHITE_FLAGBIT&outcome) {
-      mode3_printf((M3_SCREEN_WIDTH-11*SubPixel_Glyph_Width)/2,(M3_SCREEN_HEIGHT-SubPixel_Glyph_Height)/2,0x10A5, "White Wins!");
+      mode3_printf(
+          (M3_SCREEN_WIDTH-LSTRLEN(WHITE_WIN_MSG)*SubPixel_Glyph_Width)/2,
+          (M3_SCREEN_HEIGHT-SubPixel_Glyph_Height)/2,
+          0x10A5, 
+          WHITE_WIN_MSG);
     } else if (BLACK_FLAGBIT&outcome) {
-      mode3_printf((M3_SCREEN_WIDTH-11*SubPixel_Glyph_Width)/2,(M3_SCREEN_HEIGHT-SubPixel_Glyph_Height)/2,0x10A5, "Black Wins!");
+      mode3_printf(
+          (M3_SCREEN_WIDTH-LSTRLEN(BLACK_WIN_MSG)*SubPixel_Glyph_Width)/2,
+          (M3_SCREEN_HEIGHT-SubPixel_Glyph_Height)/2,
+          0x10A5,
+          BLACK_WIN_MSG);
     } else {
-      mode3_printf((M3_SCREEN_WIDTH-10*SubPixel_Glyph_Width)/2,(M3_SCREEN_HEIGHT-SubPixel_Glyph_Height)/2,0x10A5, "Stalemate!");
+      mode3_printf(
+          (M3_SCREEN_WIDTH-LSTRLEN(STALEMATE_MSG)*SubPixel_Glyph_Width)/2,
+          (M3_SCREEN_HEIGHT-SubPixel_Glyph_Height)/2,
+          0x10A5,
+          STALEMATE_MSG);
     }
     do IRQ_Sync(1<<IRQ_KEYPAD); while (!KEY_STROKE(START));
     ChessGameCtx_Close(&context);

@@ -1140,7 +1140,7 @@ bool ChessBoard_FindNextObstruction(const ChessBoard_t board_data,
   
   int dy, dx;
   if (0!=(INVALID_MVMT_FLAGBIT&dir) || 0!=(KNIGHT_MVMT_FLAGBIT&dir)) {
-    return_obstruction_idx->raw = 0xFFFFFFFFFFFFFFFFULL;
+    return_obstruction_idx->raw = INVALID_IDX_RAW_VAL;
     return FALSE;
   }
 
@@ -1179,7 +1179,7 @@ bool ChessBoard_FindNextObstruction(const ChessBoard_t board_data,
   assert(dy || dx);
   last_valid_idx = idx;
   for (idx.coord.x+=dx, idx.coord.y+=dy;
-       0ULL==(idx.raw&0xFFFFFFF8FFFFFFF8ULL); 
+       0ULL==(idx.raw&OUT_OF_BOUNDS_IDX_MASK); 
        idx.coord.x+=dx, idx.coord.y+=dy) {
     last_valid_idx = idx;
     if (EMPTY_IDX!=(PIECE_IDX_MASK&GET_BOARD_AT_IDX(board_data, idx))) {

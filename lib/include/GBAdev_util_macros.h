@@ -12,10 +12,14 @@ extern "C" {
 #define EWRAM_CODE __attribute__ (( section(".ewram"), long_call))
 
 #define IWRAM_DATA __attribute__ (( section(".iwram") ))
+#define IWRAM_BSS __attribute__ (( section(".bss") ))
 #define EWRAM_DATA __attribute__ (( section(".ewram") ))
 #define EWRAM_BSS __attribute__ (( section(".sbss") ))
 #define ALIGN(alignment) __attribute__ (( aligned(alignment) ))
 #define PACKED __attribute__ (( packed ))
+
+#define DO_PRAGMA(pg) _Pragma (#pg)
+#define TODO(msg) DO_PRAGMA(message("TODO: " #msg))
 
 #define INLN static inline
 

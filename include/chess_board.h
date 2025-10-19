@@ -89,20 +89,24 @@ typedef enum e_chess_piece_roster_id {
   ROOK0=0, KNIGHT0, BISHOP0, QUEEN, KING, BISHOP1, KNIGHT1, ROOK1,
   PAWN0, PAWN1, PAWN2, PAWN3, PAWN4, PAWN5, PAWN6, PAWN7
 } ChessPiece_Roster_Id_e;
+#define BLACK_ROSTER_ID(piece_roster_id) (piece_roster_id)
+#define WHITE_ROSTER_ID(piece_roster_id) (PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT|piece_roster_id)
+
 
 #define FILE(file) FILE_##file
 #define ROW(row) ROW##row
 
 typedef enum e_mvmt_dir {
-  UP_FLAGBIT            = 0x0002,
-  DOWN_FLAGBIT          = 0x0001,
-  LEFT_FLAGBIT          = 0x0008,
-  RIGHT_FLAGBIT         = 0x0004,
-  HOR_MASK              = 0x000C,
-  VER_MASK              = 0x0003,
-  DIAGONAL_MVMT_FLAGBIT = 0x0010,
-  KNIGHT_MVMT_FLAGBIT   = 0x0020,
-  INVALID_MVMT_FLAGBIT  = 0x0080
+  UP_FLAGBIT                = 0x0002,
+  DOWN_FLAGBIT              = 0x0001,
+  LEFT_FLAGBIT              = 0x0008,
+  RIGHT_FLAGBIT             = 0x0004,
+  HOR_MASK                  = 0x000C,
+  VER_MASK                  = 0x0003,
+  DIAGONAL_MVMT_FLAGBIT     = 0x0010,
+  KNIGHT_MVMT_FLAGBIT       = 0x0020,
+  MVMT_WIDE_FLAGBIT         = 0x0040,
+  INVALID_MVMT_FLAGBIT      = 0x0080
 } Mvmt_Dir_e;
 
 /* I know this is redundant, but I don't care */
@@ -116,11 +120,17 @@ typedef enum e_knight_mvmt_dir {
   KNIGHT_MVMT_DIM_MASK      = 0xC000
 } Knight_Mvmt_Dir_e;
 
+#define INVALID_IDX_RAW_VAL 0xFFFFFFFFFFFFFFFFULL
+#define INVALID_IDX ((ChessBoard_Idx_t){.raw=INVALID_IDX_RAW_VAL})
+#define OUT_OF_BOUNDS_IDX_MASK 0xFFFFFFF8FFFFFFF8ULL
 typedef union u_board_idx {
   struct s_chess_coord {
     ChessBoard_File_e x;
     ChessBoard_Row_e y;
   } coord;
+  struct s_chess_coord_arithmetic {
+    int x, y;
+  } arithmetic;
   u64 raw;
 } ChessBoard_Idx_t;
 
@@ -128,6 +138,7 @@ typedef union u_board_idx {
 #define CHESS_BOARD_ROW_COUNT  8
 #define CHESS_BOARD_SQUARE_COUNT (CHESS_BOARD_FILE_COUNT*CHESS_BOARD_ROW_COUNT)
 #define CHESS_TEAM_PIECE_COUNT (CHESS_BOARD_FILE_COUNT*2)
+#define CHESS_TOTAL_PIECE_COUNT (CHESS_TEAM_PIECE_COUNT*2)
 
 #define BLACK_TURN_FLAGBIT BLACK_FLAGBIT
 #define WHITE_TURN_FLAGBIT WHITE_FLAGBIT
@@ -170,12 +181,24 @@ typedef struct s_piece_tracker {
   Graph_t *piece_graph;
 } ChessPiece_Tracker_t;
 
+
+#define INVALID_PGN_MOVE \
+    (PGN_Move_t){ \
+        .move = { { .raw = INVALID_IDX_RAW_VAL }, \
+                  { .raw = INVALID_IDX_RAW_VAL } }, \
+        .move_outcome = MOVE_UNSUCCESSFUL, \
+        .roster_id    = 0xFFFFU, \
+        .promotion    = 0xFFFFFFFFU \
+    }
+
 typedef struct s_pgn_move {
   ChessBoard_Idx_t move[2];
   u16 roster_id;
   Move_Validation_Flag_e move_outcome;
   ChessPiece_e promotion;
 } ALIGN(2) PGN_Move_t;
+
+
 typedef struct s_pgn_round {
   PGN_Move_t moves[2];
 } PGN_Round_t;
@@ -210,6 +233,8 @@ typedef struct s_chess_context {
 #define BOARD_IDX(bidx) bidx.coord.y][bidx.coord.x
 
 #define GET_BOARD_AT_IDX(board, board_idx) (board[BOARD_IDX(board_idx)])
+#define CHESS_ROSTER_PIECE_ALIVE(roster, piece_roster_id)\
+  (roster.all&(1<<(piece_roster_id)))
 
 
 #define ABS(val, width) (((u##width)1<<(width-1))&(val) ? (~(val)+1) : val)
@@ -248,6 +273,7 @@ Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
                                      const PGN_Round_LL_t *mvmt_ll);
 
 void ChessGameCtx_Close(ChessGameCtx_t *ctx);
+
 #ifdef __cplusplus
 }
 #endif  /* C++ Name mangler guard */
