@@ -33,10 +33,11 @@ static Move_Validation_Flag_e ChessBoard_ValidateEnPassent(
                                          const PGN_Round_LL_t *mvmt_ll,
                                          ChessPiece_e moving_piece);
 
-static Move_Validation_Flag_e ChessBoard_ValidateCastle(const ChessBoard_Row_t *board_data,
-                                                        const ChessBoard_Idx_t *move,
-                                                        const ChessPiece_Tracker_t *tracker,
-                                                        const PGN_Round_LL_t *mvmt_ll);
+static Move_Validation_Flag_e ChessBoard_ValidateCastle(
+                                           const ChessBoard_Row_t *board_data,
+                                           const ChessBoard_Idx_t *move,
+                                           const ChessPiece_Tracker_t *tracker,
+                                           const PGN_Round_LL_t *mvmt_ll);
 
 
 
@@ -421,18 +422,38 @@ BOOL ChessBoard_PieceIsPinned(const ChessBoard_t board_data,
     return FALSE;
 
   for (size_t i = 0; i < CHESS_TEAM_PIECE_COUNT; ++i) {
-    if ((const size_t)i==moving_vert_idx)
+    switch ((ChessPiece_Roster_Id_e)i) {
+    case KNIGHT0:
+    case KING:
+    case KNIGHT1:
       continue;
+    case PAWN0:
+    case PAWN1:
+    case PAWN2:
+    case PAWN3:
+    case PAWN4:
+    case PAWN5:
+    case PAWN6:
+      attacking_piece
+        = board_data[BOARD_IDX(attacking_pdata->location)]&PIECE_IDX_MASK;
+      if (KNIGHT_IDX==attacking_piece || PAWN_IDX==attacking_piece)
+        continue;
+      break;
+    case ROOK0:
+    case BISHOP0:
+    case QUEEN:
+    case BISHOP1:
+    case ROOK1:
+      break;
+    default:
+      assert((PIECE_ROSTER_ABS_ID_MASK&i)==i);
+    }
     edges = &vertices[i+opp_vert_idx_ofs].adj_list;
     attacking_pdata = vertices[i+opp_vert_idx_ofs].data;
     if (NULL==attacking_pdata) {
       assert(0==(piece_tracker->roster.all&(1<<(i+opp_vert_idx_ofs))));
       continue;
     }
-    attacking_piece
-      = board_data[BOARD_IDX(attacking_pdata->location)]&PIECE_IDX_MASK;
-    if (attacking_piece==KNIGHT_IDX || attacking_piece==PAWN_IDX)
-      continue;
 
     LL_FOREACH(LL_NODE_VAR_INITIALIZER(GraphEdge, cur), cur, edges) {
       if ((const size_t)cur->data.dst_idx != moving_vert_idx)
@@ -442,9 +463,10 @@ BOOL ChessBoard_PieceIsPinned(const ChessBoard_t board_data,
       assert(!(attacker_rel_start_loc&INVALID_MVMT_FLAGBIT));
       if (attacker_rel_start_loc&KNIGHT_MVMT_FLAGBIT)
         break;
-
       if (attacker_rel_start_loc == start_loc_rel_king) {
-        if (!ChessBoard_ValidateMoveClearance(board_data, hyp_move, start_loc_rel_king)) {
+        if (!ChessBoard_ValidateMoveClearance(board_data,
+                                              hyp_move,
+                                              start_loc_rel_king)) {
           // If no clearance, then we know there's another piece behind that 
           // can take the fall for us.
           break;
@@ -945,10 +967,10 @@ BOOL ChessBoard_ValidateMoveClearance(const ChessBoard_t board_data,
 
 
 Move_Validation_Flag_e ChessBoard_ValidateCastle(
-                                            const ChessBoard_Row_t *board_data,
-                                            const ChessBoard_Idx_t *move,
-                                            const ChessPiece_Tracker_t *tracker,
-                                            const PGN_Round_LL_t *mvmt_ll) {
+                                           const ChessBoard_Row_t *board_data,
+                                           const ChessBoard_Idx_t *move,
+                                           const ChessPiece_Tracker_t *tracker,
+                                           const PGN_Round_LL_t *mvmt_ll) {
   GraphEdge_LL_t *edges;
   const ChessPiece_e *board_row;
   ChessBoard_Row_e row;

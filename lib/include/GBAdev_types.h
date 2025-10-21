@@ -20,6 +20,8 @@ typedef short int               i16;
 typedef long int                i32;
 typedef long long int           i64;
 
+typedef unsigned long int uptr_t;
+
 typedef _Bool                   BOOL;
 
 typedef unsigned long int       WORD;

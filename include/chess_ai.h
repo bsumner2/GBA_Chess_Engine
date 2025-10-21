@@ -29,13 +29,14 @@ typedef struct s_chess_ai_params {
   u8 gen, team;
 } ChessAI_Params_t;
 
+#define CONVERT_CHESS_AI_TEAM_FLAG(team) ((team)<<8)
 
-
-
-
-IWRAM_CODE void ChessAI_Params_Init(ChessAI_Params_t *obj, BoardState_t 
-    *root_state, 
-    int depth);
+IWRAM_CODE void ChessAI_Params_Init(ChessAI_Params_t *obj,
+                                    BoardState_t *root_state, 
+                                    int depth,
+                                    u32 team);
+#define ChessAI_Params_Uninit(obj)\
+  Fast_Memset32(obj, 0, sizeof(ChessAI_Params_t)/sizeof(WORD))
 
 IWRAM_CODE void ChessAI_Move(ChessAI_Params_t *ai_params,
                              ChessAI_MoveSearch_Result_t *return_move);

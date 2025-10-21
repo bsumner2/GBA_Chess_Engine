@@ -7,7 +7,6 @@
 #include "chess_move_iterator.h"
 
 
-
 #define PAWN_PROMOTION_TYPE_CT 4
 
 extern const ChessPiece_e PROMOTION_SEL[4];
@@ -87,7 +86,7 @@ InternalMoveIterator_t *InternalMoveIterator_Init(
   dirs = iterator->directions;
   if (PAWN_IDX==(PIECE_IDX_MASK&piece_type)) {
     const ChessBoard_Row_e DOUBLE_SQR_ROW
-      = (WHITE_FLAGBIT&piece_type) ? ROW_4 : ROW_5;
+      = (WHITE_FLAGBIT&piece_type) ? ROW_2 : ROW_7;
     const Mvmt_Dir_e VERT_FLAGBIT
       = (WHITE_FLAGBIT&piece_type) ? UP_FLAGBIT : DOWN_FLAGBIT;
 
@@ -108,7 +107,7 @@ InternalMoveIterator_t *InternalMoveIterator_Init(
         continue;
       dirs[i] = INVALID_MVMT_FLAGBIT;
     }
-  } else if (KNIGHT_MVMT_FLAGBIT==(PIECE_IDX_MASK&piece_type)) {
+  } else if (KNIGHT_IDX==(PIECE_IDX_MASK&piece_type)) {
     dir_count = KNIGHT_MVMT_CT;
     if (FILE_B < start_loc.coord.x) {
       // tall left moves, AND...
@@ -132,22 +131,22 @@ InternalMoveIterator_t *InternalMoveIterator_Init(
     // respectively.
     // wide moves are 1,2 and 5,6 for left up, left down, right up, right down
     if (ROW_7 < start_loc.coord.y) {
-      // tall up moves, AND...
-      dirs[0] |= UP_FLAGBIT, dirs[4] |= UP_FLAGBIT;
-      // ... wide up moves
+      // wide up moves, AND...
       dirs[1] |= UP_FLAGBIT, dirs[5] |= UP_FLAGBIT;
-    } else if (ROW_8 < start_loc.coord.y) {
-      // tall up moves only
+      // ... tall up moves
       dirs[0] |= UP_FLAGBIT, dirs[4] |= UP_FLAGBIT;
+    } else if (ROW_8 < start_loc.coord.y) {
+      // wide up moves only
+      dirs[1] |= UP_FLAGBIT, dirs[5] |= UP_FLAGBIT;
     }
     if (ROW_2 > start_loc.coord.y) {
-      // tall down moves, AND...
-      dirs[3] |= DOWN_FLAGBIT, dirs[7] |= DOWN_FLAGBIT;
-      // ... wide down moves
+      // wide down moves, AND...
       dirs[2] |= DOWN_FLAGBIT, dirs[6] |= DOWN_FLAGBIT;
-    } else if (ROW_1 > start_loc.coord.y) {
-      // tall down moves only
+      // ... tall down moves
       dirs[3] |= DOWN_FLAGBIT, dirs[7] |= DOWN_FLAGBIT;
+    } else if (ROW_1 > start_loc.coord.y) {
+      // wide down moves only
+      dirs[2] |= DOWN_FLAGBIT, dirs[6] |= DOWN_FLAGBIT;
     }
     for (u32 dir, i=0; KNIGHT_MVMT_CT>i; ++i) {
       dir = dirs[i];
@@ -196,14 +195,41 @@ InternalMoveIterator_t *InternalMoveIterator_Init(
       }
       break;
     case KING_IDX:
-      iterator->gp_vals.king_vals = (struct s_king_special_use) {
-        .castle_moves_tried
-            = WHITE_FLAGBIT&piece_type
-                ? WHITE_CASTLE_RIGHTS_MASK
-                : BLACK_CASTLE_RIGHTS_MASK,
-        .cur_castle_move = WHITE_FLAGBIT&piece_type?WK:BK,
-        .cur_dir_idx = 0
-      };
+      {
+        u8 castle_flags;
+        if (WHITE_FLAGBIT&piece_type) {
+          if ((
+                (ChessBoard_Idx_t) {
+                  .coord = {
+                    .x=FILE_E,
+                    .y=ROW_1
+                  }
+                }).raw != start_loc.raw) {
+            castle_flags = 0;
+          } else {
+            castle_flags = WHITE_CASTLE_RIGHTS_MASK;
+          }
+        } else {
+          if ((
+                (ChessBoard_Idx_t) {
+                  .coord = {
+                    .x=FILE_E,
+                    .y = ROW_8
+                  }
+                }).raw != start_loc.raw) {
+            castle_flags = 0;
+          } else {
+            castle_flags = BLACK_CASTLE_RIGHTS_MASK;
+          }
+
+        }
+        iterator->gp_vals.king_vals = (struct s_king_special_use) {
+          .castle_moves_tried = castle_flags,
+          .cur_castle_move = WHITE_FLAGBIT&piece_type?WK:BK,
+          .cur_dir_idx = 0
+        };
+      }
+    __attribute__ (( __fallthrough__ ));
     case QUEEN_IDX:
       if (FILE_A < start_loc.coord.x) {
         dirs[2]=dirs[3]=dirs[4]=LEFT_FLAGBIT;
@@ -264,6 +290,11 @@ InternalMoveIterator_t *InternalMoveIterator_Init(
   for (u32 i = 0; dir_count > i; ++i) {
     if (dirs[i])
       continue;
+    if (INVALID_MVMT_FLAGBIT&dirs[i]) {
+      if (dirs[i]&~INVALID_MVMT_FLAGBIT)
+        invalid_directions_init_state = TRUE;
+      break;
+    }
 
     invalid_directions_init_state = TRUE;
     break;
@@ -278,31 +309,35 @@ BOOL InternalMoveIterator_GetContinuous(ChessBoard_Idx_t *query_in_out_idx,
                                         Mvmt_Dir_e dir) {
   ChessBoard_Idx_t mv = *query_in_out_idx;
   BOOL has_hor, has_ver;
+  if (INVALID_MVMT_FLAGBIT&dir)
+    return FALSE;
   if (DIAGONAL_MVMT_FLAGBIT&dir) {
     assert((HOR_MASK&dir) && (VER_MASK&dir));
     has_hor = has_ver = TRUE;
   } else {
     has_hor = 0!=(HOR_MASK&dir);
     has_ver = 0!=(VER_MASK&dir);
+    assert(has_hor^has_ver);
+
   }
   if (has_ver) {
     if (UP_FLAGBIT&dir) {
-      if (ROW_8 == mv.coord.y)
+      if ((i32)ROW_8 >= mv.arithmetic.y)
         return FALSE;
       --mv.coord.y;
     } else {
-      if (ROW_1 == mv.coord.y)
+      if ((i32)ROW_1 <= mv.arithmetic.y)
         return FALSE;
       ++mv.coord.y;
     }
   }
   if (has_hor) {
     if (LEFT_FLAGBIT&dir) {
-      if (FILE_A==mv.coord.x)
+      if ((i32)FILE_A >= mv.arithmetic.x)
         return FALSE;
       --mv.coord.x;
     } else {
-      if (FILE_H==mv.coord.x)
+      if ((i32)FILE_H <= mv.arithmetic.x)
         return FALSE;
       ++mv.coord.x;
     }
@@ -334,10 +369,11 @@ BOOL ChessMove_ContinuousMoveDirIterator_HasNext(
     return FALSE;
   assert(dir_ct > iterator_cur_idx && 0<=iterator_cur_idx);
   if (InternalMoveIterator_GetContinuous(
-                                      &dst, 
+                                      &dst,
                                       iterator->directions[iterator_cur_idx]))
     return TRUE;
   iterator->curmove = iterator->base;
+  ++iterator_cur_idx;
   for (Mvmt_Dir_e *dir = iterator->directions; dir_ct > iterator_cur_idx; 
        ++iterator_cur_idx) {
     if (INVALID_MVMT_FLAGBIT==dir[iterator_cur_idx])
@@ -381,6 +417,7 @@ BOOL InternalMoveIterator_ContinuousForceNextDirection(
     return TRUE;
   ++idx;
   iterator->gp_vals.cur_dir_idx = idx;
+  iterator->curmove = iterator->base;
   return TRUE;
 }
 
@@ -475,6 +512,8 @@ void InternalMoveIterator_ApplyPawnMove(InternalMoveIterator_t *iterator,
   ChessBoard_Idx_t dst = iterator->base;
   Mvmt_Dir_e dir;
   int idx = iterator->gp_vals.cur_dir_idx;
+  int promo_type = iterator->gp_vals.pawn_vals.cur_promo_type;
+  BOOL promo;
   dir = iterator->directions[idx];
   if (1==idx || 2==idx) {
     if (2==idx) {
@@ -491,20 +530,13 @@ void InternalMoveIterator_ApplyPawnMove(InternalMoveIterator_t *iterator,
       dst.coord.y+=idx;
       promo = 1==idx && ROW_1==dst.coord.y;
     }
-    if (promo) {
-      dest->promotion_flag = PROMOTION_SEL[promo_type];
-      dest->dst = dst;
-      ++promo_type;
-      iterator->gp_vals.pawn_vals.cur_promo_type = promo_type;
-      if (PAWN_PROMOTION_TYPE_CT==promo_type)
-        ++iterator->gp_vals.cur_dir_idx;
-      return;
-    }
   } else {
     if (UP_FLAGBIT&dir) {
       --dst.coord.y;
+      promo = ROW_8==dst.coord.y;
     } else {
       ++dst.coord.y;
+      promo = ROW_1==dst.coord.y;
     }
     if (LEFT_FLAGBIT&dir) {
       --dst.coord.x;
@@ -512,9 +544,21 @@ void InternalMoveIterator_ApplyPawnMove(InternalMoveIterator_t *iterator,
       ++dst.coord.x;
     }
   }
+  if (!promo) {
+    dest->dst = dst;
+    dest->promotion_flag = 0;
+    ++iterator->gp_vals.cur_dir_idx;
+    return;
+  }
+  dest->promotion_flag = PROMOTION_SEL[promo_type];
   dest->dst = dst;
-  dest->promotion_flag = 0;
-  ++iterator->gp_vals.cur_dir_idx;
+  ++promo_type;
+  if (PAWN_PROMOTION_TYPE_CT<=promo_type) { 
+    iterator->gp_vals.pawn_vals.cur_promo_type = 0;
+    ++iterator->gp_vals.cur_dir_idx;
+  } else {
+    iterator->gp_vals.pawn_vals.cur_promo_type = promo_type;
+  }
 }
 
 
@@ -570,7 +614,7 @@ void InternalMoveIterator_ApplyKingMove(InternalMoveIterator_t *iterator,
     }
   }
   if (has_ver) {
-    if (UP_FLAGBIT) {
+    if (UP_FLAGBIT&dir) {
       --dst.coord.y;
     } else {
       ++dst.coord.y;

@@ -240,19 +240,23 @@ typedef struct s_chess_context {
 #define ABS(val, width) (((u##width)1<<(width-1))&(val) ? (~(val)+1) : val)
 
 
-void ChessGameCtx_Init(ChessGameCtx_t *ctx);
-void ChessBG_Init(void);
+
 Move_Validation_Flag_e ChessBoard_ValidateMove(const ChessGameCtx_t *ctx);
+
 Mvmt_Dir_e ChessBoard_MoveGetDir(const ChessBoard_Idx_t move[2]);
+
 BOOL ChessBoard_FindNextObstruction(const ChessBoard_t board_data,
                                     const ChessBoard_Idx_t *start,
                                     ChessBoard_Idx_t *return_obstruction_idx,
                                     Mvmt_Dir_e dir);
+
 Knight_Mvmt_Dir_e ChessBoard_KnightMoveGetDir(const ChessBoard_Idx_t *mv,
                                               Mvmt_Dir_e dir);
+
 int ChessBoard_KingInCheck(ChessPiece_Data_t **return_pieces,
                            const ChessPiece_Tracker_t *tracker,
                            u32 team);
+
 BOOL ChessBoard_ValidateKingMoveEvadesCheck(
                                      const ChessGameCtx_t *ctx,
                                      const ChessPiece_Data_t *checking_pieces,
@@ -272,7 +276,6 @@ Move_Validation_Flag_e ChessBoard_ValidateMoveLegality(
                                      const ChessPiece_Tracker_t *tracker,
                                      const PGN_Round_LL_t *mvmt_ll);
 
-void ChessGameCtx_Close(ChessGameCtx_t *ctx);
 
 #ifdef __cplusplus
 }

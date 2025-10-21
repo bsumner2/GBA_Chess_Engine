@@ -8,6 +8,7 @@
 #include "chess_board.h"
 #include "chess_move_iterator.h"
 #include "chess_ai.h"
+#include "debug_io.h"
 #include "graph.h"
 #include "zobrist.h"
 
@@ -225,10 +226,13 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
 
     }
 
-    /* Now it's active high. Set state->castle_rights to NOT(castle_rights),
-     * overwrite castle_rights with NOT(castle_rights) as well!
+    /* Now it's active high. Set castle_rights^=ZOBRIST_CASTLE_ID_MASK to clear
+     * only relevant bits that were high, and that should allow us to ensure 
+     * that castle_rights = ZOBRIST_CASTLE_ID_MASK&ACTIVE_HIGH(castle_rights).
+     * so then we set state->castle_rights = castle_rights
      */
-    state->castle_rights = castle_rights = ~castle_rights;
+    castle_rights ^= ZOBRIST_CASTLE_ID_MASK;
+    state->castle_rights = castle_rights;
   }
   // assert castle_rights is repping a valid state
   assert((castle_rights&ZOBRIST_CASTLE_ID_MASK) == castle_rights);
@@ -258,7 +262,7 @@ EWRAM_CODE BoardState_t *Graph_FromCtx(BoardState_t *board_state,
   ChessMoveIteration_t mv;
   ChessPiece_Data_t hit_piece_query_obj = {0};
   
-  ChessMoveIterator_t *iterator;
+  ChessMoveIterator_t iterator;
   const ChessBoard_Row_t *board_data = ctx->board_data;
   const Graph_t *ctx_graph = ctx->tracker.piece_graph;
   const GraphNode_t *ctx_vert;
@@ -295,18 +299,12 @@ EWRAM_CODE BoardState_t *Graph_FromCtx(BoardState_t *board_state,
     cur_adj.all = 0;
     loc_compact = BOARD_IDX_CONVERT(loc, COMPACT_IDX_TYPE);
      
-    iterator = ChessMoveIterator_Alloc(loc, board_data[BOARD_IDX(loc)]);
-    assert(NULL!=iterator);
-    if (!ChessMoveIterator_HasNext(iterator)) {
-      ChessMoveIterator_Dealloc(iterator);
-      continue;
-    }
-    for (BOOL hasnext = ChessMoveIterator_Next(iterator, &mv); 
+    assert(ChessMoveIterator_Alloc(&iterator, loc, board_state, MV_ITER_MOVESET_COLLISIONS_ONLY_SET));
+    for (BOOL hasnext = ChessMoveIterator_Next(&iterator, &mv);
          hasnext;
-         hasnext = ChessMoveIterator_Next(iterator, &mv)) {
-      assert(ChessMoveIterator_Next(iterator, &mv));
-      if (EMPTY_IDX==board_data[BOARD_IDX(mv.dst)])
-        continue;
+         hasnext = ChessMoveIterator_Next(&iterator, &mv)) {
+//      assert(ChessMoveIterator_Next(&iterator, &mv));
+      assert(EMPTY_IDX!=board_data[BOARD_IDX(mv.dst)]);
       hit_piece_query_obj.location = mv.dst;
       ctx_vert = Graph_Get_Vertex(ctx_graph, &hit_piece_query_obj);
       assert(NULL!=ctx_vert);
@@ -314,12 +312,8 @@ EWRAM_CODE BoardState_t *Graph_FromCtx(BoardState_t *board_state,
       assert(NULL!=ctx_vert->data);
       hit_idx = ctx_vert->idx;
       cur_adj.all |= 1<<hit_idx;
-      if (!ChessMoveIterator_IsContinuousMovementIterator(iterator))
-        continue;
-      assert(ChessMoveIterator_ContinuousForceNextDirection(iterator));
     }
-    ChessMoveIterator_Dealloc(iterator);
-    iterator = NULL;
+    ChessMoveIterator_Dealloc(&iterator);
     
     w_cardinality = __builtin_popcount(cur_adj.team_invariant.white);
     b_cardinality = __builtin_popcount(cur_adj.team_invariant.black);
@@ -440,15 +434,20 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
     board_state->board[BOARD_IDX(rook_end)] = rook_piece;
     board_state->board[BOARD_IDX(rook_start)] = EMPTY_IDX;
     
-  } else {
-
   }
   // Now that captured piece is taken care of, we can update hashmap[move[1]]
   // safely.
   board_state->graph.vertex_hashmap[BOARD_IDX(move[1])] = moving_idx;
-  board_state->graph.vertices[moving_idx].location = move[1];
   board_state->board[BOARD_IDX(move[1])] = moving_piece;
-  assert(board_state->graph.vertices[moving_idx].location.raw==move[0].raw);
+  ensure(board_state->graph.vertices[moving_idx].location.raw==move[0].raw,
+    "state graph says location of vertex = "
+    "{.raw=\x1b[0x44E4]0x%02hhX\x1b[0x1484]}.\nMove idxs are:\n\t"
+    "[0] = {.raw=\x1b[0x44E4]0x%02hhX\x1b[0x1484]},\t[1] = "
+    "{.raw=\x1b[0x44E4]0x%02hhX\x1b[0x1484]}",
+    board_state->graph.vertices[moving_idx].location.raw,
+    move[0].raw, move[1].raw);
+  board_state->graph.vertices[moving_idx].location = move[1];
+  board_state->board[BOARD_IDX(move[0])] = EMPTY_IDX;
   do {
     int shamt = (moving_idx&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT)
                             ? CASTLE_RIGHTS_WHITE_FLAGS_SHAMT
@@ -548,7 +547,7 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
                                                    BoardState_t *board_state) {
   ChessMoveIteration_t mv_iter;
   ChessBoard_Idx_t cur_loc;
-  ChessMoveIterator_t *iterator;
+  ChessMoveIterator_t iterator;
   PieceState_Graph_Vertex_t *vertices = board_state->graph.vertices;
   const u8 (*const vmap)[CHESS_BOARD_ROW_COUNT] = board_state->graph.vertex_hashmap;
   const ChessBoard_Row_t *board = board_state->board;
@@ -565,25 +564,19 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
     assert(vmap[BOARD_IDX(cur_loc)]==i);
     curpiece = board[BOARD_IDX(cur_loc)];
     assert(EMPTY_IDX!=curpiece);
-    iterator = ChessMoveIterator_Alloc(cur_loc, curpiece);
+    assert(ChessMoveIterator_Alloc(&iterator, cur_loc, board_state, MV_ITER_MOVESET_COLLISIONS_ONLY_SET));
     cur_adjbits.all = 0;
-    assert(NULL!=iterator);
-    while (ChessMoveIterator_HasNext(iterator)) {
-      assert(ChessMoveIterator_Next(iterator, &mv_iter));
-      if (EMPTY_IDX==board[BOARD_IDX(mv_iter.dst)])
-        continue;
+    while (ChessMoveIterator_HasNext(&iterator)) {
+      assert(ChessMoveIterator_Next(&iterator, &mv_iter));
+      assert(EMPTY_IDX!=board[BOARD_IDX(mv_iter.dst)]);
       hit_idx = vmap[BOARD_IDX(mv_iter.dst)];
       assert(PIECE_GRAPH_EMPTY_HASHENT!=hit_idx);
       assert(BOARD_IDX_CONVERT(mv_iter.dst, COMPACT_IDX_TYPE).raw
                     ==vertices[hit_idx].location.raw);
       assert(CHESS_ROSTER_PIECE_ALIVE(roster, hit_idx));
       cur_adjbits.all|=(1<<hit_idx);
-      if (!ChessMoveIterator_IsContinuousMovementIterator(iterator))
-        continue;
-      assert(ChessMoveIterator_ContinuousForceNextDirection(iterator));
     }
-    ChessMoveIterator_Dealloc(iterator);
-    iterator = NULL;
+    ChessMoveIterator_Dealloc(&iterator);
     white_cardinality = __builtin_popcount(cur_adjbits.team_invariant.white);
     black_cardinality = __builtin_popcount(cur_adjbits.team_invariant.black);
     total = white_cardinality+black_cardinality;
@@ -597,5 +590,5 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
       vertices[i].defending_count = black_cardinality;
     }
   }
-  return board_state;  
+  return board_state;
 }

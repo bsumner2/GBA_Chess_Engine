@@ -26,14 +26,15 @@ INLN IWRAM_CODE i16 Positional_Eval(ChessPiece_e piece,
 
 
 static IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(
-    ChessAI_Params_t *params,
-    i16 alpha,
-    i16 beta);
+                                                      ChessAI_Params_t *params,
+                                                      i16 alpha,
+                                                      i16 beta);
 
 
 IWRAM_CODE void ChessAI_Params_Init(ChessAI_Params_t *obj,
                                     BoardState_t *root_state,
-                                    int depth) {
+                                    int depth,
+                                    u32 team) {
   static_assert(0==(sizeof(g_ttable)%sizeof(WORD)));
   Fast_Memset32((obj->ttable = &g_ttable), 
                 0UL,
@@ -41,15 +42,17 @@ IWRAM_CODE void ChessAI_Params_Init(ChessAI_Params_t *obj,
   obj->root_state = root_state;
   obj->depth = depth;
   obj->gen = 0;
+  obj->team = CONVERT_CTX_MOVE_FLAG(team);
 }
 
 IWRAM_CODE void ChessAI_Move(ChessAI_Params_t *ai_params,
                              ChessAI_MoveSearch_Result_t *returned_move) {
-  ai_params->depth = MAX_DEPTH;
+  const u32 ini_depth = ai_params->depth;
   *returned_move
         = ChessAI_ABSearch(ai_params,
                            INT16_MIN,
                            INT16_MAX);
+  ai_params->depth = ini_depth;
 }
 
 
@@ -82,55 +85,53 @@ ChessAI_MoveSearch_Result_t ChessAI_ABSearch(ChessAI_Params_t *params,
   }
 
   // 3. Generate moves
-  BoardState_t root_state_mutable;
+  BoardState_t move_applied_state;
   ChessMoveIteration_t move;
   PieceState_Graph_Vertex_t v;
   ChessMoveIterator_t movegen = {0};
-  BoardState_t *const OG_ROOT_IMMUTABLE = params->root_state;
+  BoardState_t *const PREMOVE_ROOT_STATE = params->root_state;
   const u32 TEAM_PIECE_IDXS_OFS
-                = root_state_mutable.state.side_to_move&WHITE_TO_MOVE_FLAGBIT
+                = PREMOVE_ROOT_STATE->state.side_to_move&WHITE_TO_MOVE_FLAGBIT
                               ?PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT
                               :0,
             ALLIED_KING = TEAM_PIECE_IDXS_OFS|KING,
             OPP_IDX_OFS = PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT^TEAM_PIECE_IDXS_OFS;
   Move_Validation_Flag_e last_move = params->last_move;
-  ChessPiece_e cur_piece;
-  i16 best_move = IS_MAXIMIZING(OG_ROOT_IMMUTABLE->state.side_to_move)
+  i16 best_move = IS_MAXIMIZING(PREMOVE_ROOT_STATE->state.side_to_move)
                         ? INT16_MIN
                         : INT16_MAX;
   ChessBoard_Idx_Compact_t src;
   BOOL prune=FALSE;
-  params->root_state = &root_state_mutable;  // switch out params board state 
+  params->root_state = &move_applied_state;  // switch out params board state 
                                              // ptr to the addr of the mutable 
                                              // local board state.
   for (u32 i,i_base = 0; CHESS_TEAM_PIECE_COUNT>i_base; ++i_base) {
     i = i_base|TEAM_PIECE_IDXS_OFS;
-    if (!CHESS_ROSTER_PIECE_ALIVE(params->root_state->graph.roster, i))
+    if (!CHESS_ROSTER_PIECE_ALIVE(PREMOVE_ROOT_STATE->graph.roster, i))
       continue;
 
-    v = OG_ROOT_IMMUTABLE->graph.vertices[i];
+    v = PREMOVE_ROOT_STATE->graph.vertices[i];
 
     src = v.location;
-    cur_piece = OG_ROOT_IMMUTABLE->board[BOARD_IDX(src)];
     ChessMoveIterator_Alloc(&movegen, BOARD_IDX_CONVERT(src, NORMAL_IDX_TYPE),
-                            OG_ROOT_IMMUTABLE,
+                            PREMOVE_ROOT_STATE,
                             MV_ITER_MOVESET_ALL_MINUS_ALLIED_COLLISIONS
                                |MV_ITER_MOVESET_ORDERED_FLAGBIT);
     while (ChessMoveIterator_HasNext(&movegen)) {
       // copy immutable initial root state to the local mutable root state, 
       // so that it's ready to have the move applied to it.
-      Fast_Memcpy32(&root_state_mutable,
-                    OG_ROOT_IMMUTABLE,
+      Fast_Memcpy32(&move_applied_state,
+                    PREMOVE_ROOT_STATE,
                     sizeof(BoardState_t)/sizeof(WORD));
-      ChessMoveIterator_Next(&movegen, &move);      
+      ChessMoveIterator_Next(&movegen, &move);
       // 4. Apply move
-      BoardState_ApplyMove(&root_state_mutable,
+      BoardState_ApplyMove(&move_applied_state,
           (ChessBoard_Idx_Compact_t[2]) {
             src,
             BOARD_IDX_CONVERT(move.dst, COMPACT_IDX_TYPE)
           }, 
           move.special_flags);
-      if (BoardState_KingInCheck(&root_state_mutable,
+      if (BoardState_KingInCheck(&move_applied_state,
                                  ALLIED_KING,
                                  OPP_IDX_OFS))
         continue;
@@ -144,10 +145,16 @@ ChessAI_MoveSearch_Result_t ChessAI_ABSearch(ChessAI_Params_t *params,
                                               beta);
        
         // 7. Alpha-beta logic
-        if (IS_MAXIMIZING(OG_ROOT_IMMUTABLE->state.side_to_move)) {
+        if (IS_MAXIMIZING(PREMOVE_ROOT_STATE->state.side_to_move)) {
           if (mv.score > best_move) {
             best_move = mv.score;
-            tt_entry.best_move = mv;  /* update ttable entry that will be 
+            tt_entry.best_move = (ChessAI_MoveSearch_Result_t){
+              .dst = BOARD_IDX_CONVERT(move.dst, COMPACT_IDX_TYPE),
+              .promo = move.promotion_flag,
+              .mv_flags = move.special_flags,
+              .score = mv.score,
+              .start = src
+            };  /* update ttable entry that will be 
                                        * tabulated upon exit. */
             if (mv.score > alpha)
               alpha = mv.score;
@@ -159,7 +166,14 @@ ChessAI_MoveSearch_Result_t ChessAI_ABSearch(ChessAI_Params_t *params,
         } else {
           if (mv.score < best_move) {
             best_move=mv.score;
-            tt_entry.best_move = mv;
+            tt_entry.best_move = (ChessAI_MoveSearch_Result_t){
+              .dst = BOARD_IDX_CONVERT(move.dst, COMPACT_IDX_TYPE),
+              .promo = move.promotion_flag,
+              .mv_flags = move.special_flags,
+              .score = mv.score,
+              .start = src
+            };  /* update ttable entry that will be 
+                                       * tabulated upon exit. */
             if (mv.score < beta)
               beta=mv.score;
           }
@@ -172,21 +186,15 @@ ChessAI_MoveSearch_Result_t ChessAI_ABSearch(ChessAI_Params_t *params,
       // 6. Reset params->depth to this call's param values.
       // Don't need to reset last_move
       ++params->depth;
-
       if (beta <= alpha) break; // prune
     }
     ChessMoveIterator_Dealloc(&movegen);
     if (prune) {
       break;
-    } else {
-      Fast_Memcpy32(&root_state_mutable,
-                    OG_ROOT_IMMUTABLE,
-                    sizeof(BoardState_t)/sizeof(WORD));
     }
-    
   }
   // Restore pointer to original immutable copy of board_state
-  params->root_state = OG_ROOT_IMMUTABLE;
+  params->root_state = PREMOVE_ROOT_STATE;
   params->last_move = last_move;
 
   // 8. Store in TT

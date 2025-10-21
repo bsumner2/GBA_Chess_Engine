@@ -1,9 +1,16 @@
 /** (C) 16 of October, 2025 Burt Sumner */
 /** Free to use, but this copyright message must remain here */
-#include "chess_move_iterator.h"
 #include <GBAdev_functions.h>
+#include <GBAdev_memmap.h>
+#include <GBAdev_types.h>
+#include <assert.h>
 #include "chess_board.h"
+#include "chess_move_iterator.h"
 #include "chess_board_state.h"
+#include "chess_gameloop.h"
+#include "chess_move_iterator_block_allocator.h"
+#include "debug_io.h"
+#include "key_status.h"
 struct s_board_state {
   ChessBoard_t board;
   GameState_t state;
@@ -15,9 +22,20 @@ struct s_chess_move_iterator_private {
   ChessMoveIteration_t *moves;
 };
 
-// Theres probly a more space-efficient value for max, but fuck it.
-#define MAX_MOVE_CANDIDATES 64
-static EWRAM_BSS ChessMoveIteration_t _L_move_buffer[MAX_MOVE_CANDIDATES];
+#define INVALID_IDX_MASK 0xFFFFFFF8FFFFFFF8ULL
+
+// Queens which have the most total possible movement directions, have, at most,
+// 27 moves when placed at most central squares of board. Therefore, we can
+// expect count to never exceed 27
+#define MAX_MOVE_CANDIDATES 27
+
+static IWRAM_BSS ChessMoveIteration_t _L_move_buffer[MAX_MOVE_CANDIDATES];
+
+
+
+
+
+
 // We can do this thanks to GBA being single-threaded.
 static const EWRAM_BSS BoardState_t *_L_cur_board_state=NULL;
 static EWRAM_DATA ChessBoard_Idx_t _L_cur_piece_location = INVALID_IDX;
@@ -153,7 +171,7 @@ int __MoveIterationCmp(const void *a, const void *b) {
   lhs_dst_piece = _L_cur_board_state->board[BOARD_IDX(lhs->dst)];
   rhs_dst_piece = _L_cur_board_state->board[BOARD_IDX(rhs->dst)];
 
-  assert(INVALID_IDX_RAW_VAL == _L_cur_piece_location.raw);
+  assert(INVALID_IDX_RAW_VAL != _L_cur_piece_location.raw);
   start_piece = PIECE_IDX_MASK
                   & _L_cur_board_state->board[BOARD_IDX(_L_cur_piece_location)];
 
@@ -213,11 +231,15 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
   ChessMoveIterator_t iterator={0};
   ChessMoveIteration_t cur_mv;
   const ChessPiece_e (*BOARD_DATA)[CHESS_BOARD_ROW_COUNT] = state->board;
+  ChessMoveIteration_t *moves;
+  const u32 ALLIED_TEAM_FLAGBIT 
+                      = BOARD_DATA[BOARD_IDX(piece_location)]&PIECE_TEAM_MASK,
+            OPP_TEAM_FLAGBIT
+                      = PIECE_TEAM_MASK^ALLIED_TEAM_FLAGBIT;
+
   ChessPiece_e mv_piece = BOARD_DATA[BOARD_IDX(piece_location)], curpiece;
-  const u32 ALLIED_TEAM_FLAGBIT = mv_piece&PIECE_TEAM_MASK,
-            OPP_TEAM_FLAGBIT = PIECE_TEAM_MASK^ALLIED_TEAM_FLAGBIT;
   u32 count = 0;
-  BOOL order = MV_ITER_MOVESET_ORDERED(mode);
+  BOOL ordered = MV_ITER_MOVESET_ORDERED(mode);
   mode = MV_ITER_MOVESET_SET_TYPE(mode);
   Fast_Memset32(&iter, 0, sizeof(InternalMoveIterator_t)/sizeof(WORD));
   *dst_iterator = iterator;
@@ -230,7 +252,168 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
       MAX_MOVE_CANDIDATES*sizeof(ChessMoveIteration_t)/sizeof(WORD));
   while (InternalMoveIterator_HasNext(&iter)) {
     assert(InternalMoveIterator_Next(&iter, &cur_mv));
+#if 0
+    assert(0ULL==(cur_mv.dst.raw&INVALID_IDX_MASK));
+#else
+    if (0ULL!=(cur_mv.dst.raw&INVALID_IDX_MASK)) {
+      DebugMsgF(DEBUG_MSG_RETURNS,
+                "Invalid board index given: (%u, %u).\n"
+                "Interator Info: iterator_type = 0x%04hX\n",
+                cur_mv.dst.coord.x, cur_mv.dst.coord.y, iter.piece);
+      do IRQ_Sync(1<<IRQ_KEYPAD); while (!KEY_STROKE(A));
+      DebugMsgF(DEBUG_MSG_RETURNS,
+                "moving piece start loc: \x1b[0x44E4](%d,%d)\x1b[0x1484]"
+                "cur_mv = {\n\t.dst= \x1b[0x44E4](%d,%d)\x1b["
+                TO_EXP_STR(DEF_ERR_MSG_CLR) "],\n\t"
+                ".promotion_flag = \x1b[0x44E4]%d\x1b[" 
+                TO_EXP_STR(DEF_ERR_MSG_CLR)"],\n\t"
+                "special_flags = \x1b[0x44E4]0x%04hX\x1b[" 
+                TO_EXP_STR(DEF_ERR_MSG_CLR)"]\n}",
+                piece_location.arithmetic.x,piece_location.arithmetic.y,
+                cur_mv.dst.arithmetic.x, cur_mv.dst.arithmetic.y,
+                cur_mv.promotion_flag, cur_mv.special_flags);
+      do IRQ_Sync(1<<IRQ_KEYPAD); while (!KEY_STROKE(A));
+#define FMT_WITH_CLR(conversion_flag)\
+      "\x1b[0x44E4]" conversion_flag "\x1b[" TO_EXP_STR(DEF_ERR_MSG_CLR) "]"
+      DebugMsgF(DEBUG_MSG_EXITS,
+                "internal_iterator.directions = {\n\t"
+                FMT_WITH_CLR("0x%04hX") ", " FMT_WITH_CLR("0x%04hX") ", "
+                FMT_WITH_CLR("0x%04hX") ", " FMT_WITH_CLR("0x%04hX") ", "
+                FMT_WITH_CLR("0x%04hX") ",\n\t" FMT_WITH_CLR("0x%04hX") ", "
+                FMT_WITH_CLR("0x%04hX") ", " FMT_WITH_CLR("0x%04hX") "\n}\n"
+                "internal_iterator.cur_dir_idx = " FMT_WITH_CLR("%hu"),
+                iter.directions[0], iter.directions[1], iter.directions[2],
+                iter.directions[3], iter.directions[4], iter.directions[5],
+                iter.directions[6], iter.directions[7], 
+                iter.gp_vals.cur_dir_idx);
+    }
+#endif
     curpiece = BOARD_DATA[BOARD_IDX(cur_mv.dst)];
+    if (MOVE_SPECIAL_MOVE_FLAGS_MASK&cur_mv.special_flags) {
+      BOOL invalid_mv = TRUE;
+      if (MOVE_CASTLE_MOVE_FLAGS_MASK&cur_mv.special_flags) {
+        ChessBoard_Idx_t check_against;
+        u32 flag;
+        i32 dx;
+        BOOL valid=TRUE;
+        assert(KING_IDX==(PIECE_IDX_MASK&mv_piece));
+        if (MOVE_CASTLE_KINGSIDE&cur_mv.special_flags) {
+          flag = KINGSIDE_SHAMT_INVARIANT;
+          check_against.coord.x = FILE_G;
+          dx=-1;
+        } else {
+          flag = QUEENSIDE_SHAMT_INVARIANT;
+          check_against.coord.x = FILE_C;
+          dx=+1;
+        }
+        if (WHITE_FLAGBIT&mv_piece) {
+          flag<<=CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
+          check_against.coord.y = ROW_1;
+        } else {
+          flag<<=CASTLE_RIGHTS_BLACK_FLAGS_SHAMT;
+          check_against.coord.y = ROW_8;
+        }
+        if (0==(flag&state->state.castle_rights))
+          continue;
+        assert((
+              (const ChessBoard_Idx_t){
+                .coord = {
+                  .x=FILE_E,
+                  .y=check_against.coord.y
+                }
+              }).raw==piece_location.raw);
+        if ((const u64)check_against.raw != cur_mv.dst.raw) {
+          DebugMsgF(DEBUG_MSG_EXITS,
+              "Movement type = \x1b[0x44E4]%s\x1b[0x1484]\n"
+              "So expected idx (\x1b[0x44E4]FILE_%c\x1b[0x1484], "
+              "\x1b[0x44E4]ROW_%d\x1b[0x1484]),\nbut cur_mv.dst = "
+              "(\x1b[0x44E4]FILE_%c\x1b[0x1484], "
+              "\x1b[0x44E4]ROW_%d\x1b[0x1484])",
+              (cur_mv.special_flags&MOVE_CASTLE_QUEENSIDE 
+                            ? "MOVE_CASTLE_QUEENSIDE"
+                            : "MOVE_CASTLE_KINGSIDE"),
+              ('A'+check_against.arithmetic.x), (8-check_against.arithmetic.y),
+              ('A'+cur_mv.dst.arithmetic.x), (8-check_against.arithmetic.y));
+        }
+
+        if (EMPTY_IDX!=curpiece)
+          continue;
+        check_against.coord.x = FILE_E > check_against.coord.x 
+                                       ? FILE_A
+                                       : FILE_H;
+        if ((ALLIED_TEAM_FLAGBIT|ROOK_IDX)
+                !=BOARD_DATA[BOARD_IDX(check_against)])
+          continue;
+        check_against.arithmetic.x += dx;
+        for (i32 file = check_against.arithmetic.x; FILE_E!=file;
+             check_against.arithmetic.x = (file+=dx)) {
+          ensure((VALID_FILE_MASK&file)==file, "file = \x1b[0x44E4]%ld\x1b[0x1484]\nVALID_FILE_MASK&file = \x1b[0x44E4]%lu\x1b[0x1484]", file, file&VALID_FILE_MASK);
+          if (EMPTY_IDX!=BOARD_DATA[BOARD_IDX(check_against)]) {
+            valid = FALSE;
+            break;
+          }
+        }
+        if (!valid)
+          continue;
+      } else if (MOVE_PAWN_TWO_SQUARE&cur_mv.special_flags) {
+        ChessBoard_Idx_t middle;
+        assert(PAWN_IDX==(PIECE_IDX_MASK&mv_piece));
+        if (EMPTY_IDX!=curpiece)
+          continue;
+        middle.coord.x = piece_location.coord.x;
+        
+        if (WHITE_FLAGBIT&mv_piece) {
+          assert(ROW_2==piece_location.coord.y && ROW_4==cur_mv.dst.coord.y);
+          middle.coord.y = ROW_3;
+          
+        } else {
+          assert(ROW_7==piece_location.coord.y && ROW_5==cur_mv.dst.coord.y);
+          middle.coord.y = ROW_6;
+        }
+        if (EMPTY_IDX!=BOARD_DATA[BOARD_IDX(middle)])
+          continue;
+        
+        
+
+      } else {
+        DebugMsgF(DEBUG_MSG_EXITS, "Unexpected move flag yielded by internal "
+            "move iterator: \x1b[0x44E4]0x%04hX\x1b[0x1484].\nHowever, the "
+            "only special flags set by this iterator are \x1b[0x44E4]0x%04hX"
+            "\x1b[0x1484]", cur_mv.special_flags, 
+            MOVE_CASTLE_MOVE_FLAGS_MASK|MOVE_PAWN_TWO_SQUARE);
+      }
+      
+      
+    } else if (PAWN_IDX==(mv_piece&PIECE_IDX_MASK)) {
+      const ChessBoard_Row_e MV_ROW = cur_mv.dst.coord.y;
+      const ChessBoard_File_e MV_FILE = cur_mv.dst.coord.x;
+      if (MV_FILE == piece_location.coord.x) {
+        if (EMPTY_IDX!=curpiece)
+          continue;
+      }
+      if (EMPTY_IDX==curpiece) {
+        if (MV_FILE==state->state.ep_file) {
+          const ChessBoard_Row_e STARTING_ROW = piece_location.coord.y;
+          if (WHITE_FLAGBIT==ALLIED_TEAM_FLAGBIT) {
+            if (ROW_6!=MV_ROW)  // can't be empty pawn attack and NOT
+                                // En Passent, so invalid move; continue
+              continue;
+            assert(ROW_5==STARTING_ROW);  // if it is proper
+                                          // en passent move row for
+                                          // white, then start loc
+                                          // MUST be ROW_5
+          } else {
+            assert(BLACK_FLAGBIT==ALLIED_TEAM_FLAGBIT);
+            // Mirror EP validity check logic for black
+            if (ROW_3!=MV_ROW)  // Same logic here. Continue for invalid move
+              continue;
+            assert(ROW_4==STARTING_ROW);  // Same logic here too.
+          }
+          assert((OPP_TEAM_FLAGBIT|PAWN_IDX)!=BOARD_DATA[STARTING_ROW][MV_FILE]);
+          cur_mv.special_flags |= MOVE_CAPTURE|MOVE_EN_PASSENT;
+        }
+      }
+    }
     switch (mode) {
     case MV_ITER_MOVESET_ALL_MINUS_ALLIED_COLLISIONS:
       if (EMPTY_IDX==curpiece) {
@@ -250,6 +433,20 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
       break;
     case MV_ITER_MOVESET_COLLISIONS_ONLY_SET:
       if (EMPTY_IDX==curpiece) {
+        if (0==(MOVE_EN_PASSENT&cur_mv.special_flags))
+          continue;
+        // Otherwise, if cap did occur, and move dest (curpiece) is empty,
+        // then en passent it mustve been.
+        if ((MOVE_EN_PASSENT|MOVE_CAPTURE)!=cur_mv.special_flags) {
+          DebugMsgF(DEBUG_MSG_EXITS,
+              "cur_mv.special_flags!=("
+              "\x1b[0x44E4]MOVE_EN_PASSENT\x1b[0x1484]|\x1b[0x44E4]MOVE_CAPTURE"
+              "\x1b[0x1484])\ncur_mv.special_flags = "
+              "\x1b[0x44E4]0x%04hX\x1b[0x1484]",
+              cur_mv.special_flags);
+        }
+        assert(PAWN_IDX==(mv_piece&PIECE_IDX_MASK));
+        _L_move_buffer[count++] = cur_mv;
         continue;
       }
       assert(curpiece&PIECE_TEAM_MASK);
@@ -270,38 +467,51 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
         assert(InternalMoveIterator_ContinuousForceNextDirection(&iter));
       if (OPP_TEAM_FLAGBIT&curpiece)
         cur_mv.special_flags |= MOVE_CAPTURE;
+      continue;
       break;
     default:
       assert(0);
     }
   }
-  iterator.priv = malloc(sizeof(ChessMoveIterator_PrivateFields_t));
-  iterator.priv->moves = malloc(sizeof(ChessMoveIteration_t)*count);
+  if (0==count) {
+    iterator.priv = NULL;
+    iterator.size = 0;
+    return TRUE;
+  }
+  iterator.priv = MoveIterator_PrivateFields_Allocate();
+  assert(NULL!=iterator.priv);
+   moves = MoveBufferHeap_Alloc(count);
+   assert(NULL!=moves);
+  *iterator.priv = (ChessMoveIterator_PrivateFields_t){ 
+    .cur_move = 0,
+    .moves = moves
+  };
+  assert(0==iterator.priv->cur_move && NULL!=iterator.priv->moves);
   static_assert(0==(sizeof(ChessMoveIteration_t)%sizeof(WORD)));
-  Fast_Memcpy32(iterator.priv->moves,
+  Fast_Memcpy32(moves,
                 _L_move_buffer,
                 count*sizeof(ChessMoveIteration_t)/sizeof(WORD));
-  // Need to pass current state to src file local, _L_cur_board_state
-  _L_cur_board_state = state;
-  _L_cur_piece_location = piece_location;
-  qsort(iterator.priv->moves,
-        count,
-        sizeof(ChessMoveIteration_t),
-        __MoveIterationCmp);
+  if (ordered) {
+    // Need to pass current state to src file local, _L_cur_board_state
+    _L_cur_board_state = state;
+    _L_cur_piece_location = piece_location;
+    qsort(moves,
+          count,
+          sizeof(ChessMoveIteration_t),
+          __MoveIterationCmp);
+  }
   iterator.size = count;
   *dst_iterator = iterator;
   return TRUE;
 }
 
 BOOL ChessMoveIterator_HasNext(const ChessMoveIterator_t *iterator) {
-  if (NULL==iterator)
+  assert(NULL!=iterator);
+  if (NULL==iterator->priv) {
+    assert(0==iterator->size);
     return FALSE;
-  if (NULL==iterator->priv)
-    return FALSE;
-  if (NULL==iterator->priv->moves)
-    return FALSE;
-  if (0==iterator->size)
-    return FALSE;
+  }
+  assert(0!=iterator->size && NULL!=iterator->priv->moves);
   return iterator->size > iterator->priv->cur_move;
 }
 
@@ -312,21 +522,20 @@ BOOL ChessMoveIterator_Next(ChessMoveIterator_t *iterator,
   if (NULL==ret_mv)
     return FALSE;
   ChessMoveIteration_t *moves = iterator->priv->moves;
-  *ret_mv = moves[++iterator->priv->cur_move];
+  *ret_mv = moves[iterator->priv->cur_move++];
   return TRUE;
 }
 
 BOOL ChessMoveIterator_Dealloc(ChessMoveIterator_t *iterator) {
   if (NULL==iterator)
     return FALSE;
-  if (NULL==iterator->priv)
-    return FALSE;
-  if (NULL==iterator->priv->moves)
-    return FALSE;
-  if (0==iterator->size)
-    return FALSE;
-  free(iterator->priv->moves);
-  free(iterator->priv);
+  if (NULL==iterator->priv) {
+    assert(0==iterator->size);
+    return TRUE;
+  }
+  assert(0!=iterator->size && NULL!=iterator->priv->moves);
+  MoveBufferHeap_Dealloc(iterator->priv->moves);
+  assert(MoveIterator_PrivateFields_Deallocate(iterator->priv));
   static_assert(sizeof(ChessMoveIterator_t)==sizeof(u64));
   *((u64*)iterator) = 0ULL;
   assert(0==iterator->size && NULL==iterator->priv);

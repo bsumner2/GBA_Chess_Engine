@@ -4,9 +4,9 @@
 #ifndef _CHESS_BOARD_STATE_
 #define _CHESS_BOARD_STATE_
 
-#include "chess_board.h"
 #include <GBAdev_types.h>
 #include <GBAdev_util_macros.h>
+#include "chess_board.h"
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
@@ -27,7 +27,7 @@ extern "C" {
  */
 #define SIDE_TO_MOVE_MASK     (PIECE_TEAM_MASK>>8)
 #define CONVERT_CTX_MOVE_FLAG(whose_turn) ((u8)((whose_turn)>>8))
-#define CONVERT_BOARD_STATE_MOVE_FLAG(side_to_move) (side_to_move<<8)
+#define CONVERT_BOARD_STATE_MOVE_FLAG(side_to_move) ((side_to_move)<<8)
 #define IS_MAXIMIZING(side_to_move) (side_to_move & WHITE_TO_MOVE_FLAGBIT)
 
 

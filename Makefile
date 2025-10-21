@@ -79,7 +79,11 @@ ifeq '$(DB)' 'lldb'
 	DBFLAGS=-o 'gdb-remote $(IP):2345' --arch armv4t -- $(BIN)/$(TARGET).debug.elf --arch x86_64
 else
 	DB=$(PREFIX)gdb
-	DBFLAGS=$(BIN)/$(TARGET).debug.elf -ex 'target remote $(IP):2345'
+	ifeq '$(GDB_INI)' ''
+		DBFLAGS=$(BIN)/$(TARGET).debug.elf -ex 'target remote $(IP):2345'
+	else
+		DBFLAGS=$(BIN)/$(TARGET).debug.elf -ex 'target remote $(IP):2345' -x $(GDB_INI)
+	endif
 endif
 
 
