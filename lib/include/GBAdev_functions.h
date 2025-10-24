@@ -49,7 +49,7 @@ void IRQ_Add_Callback(void (*)(void));
 INLN void OAM_Copy(Obj_Attr_t *dst, const Obj_Attr_t *src, u32 count);
 
 
-INLN void OAM_Copy(Obj_Attr_t *dst, const Obj_Attr_t *src, u32 count) {
+void OAM_Copy(Obj_Attr_t *dst, const Obj_Attr_t *src, u32 count) {
   Fast_Memcpy32(dst, src, count<<1);
 }
 

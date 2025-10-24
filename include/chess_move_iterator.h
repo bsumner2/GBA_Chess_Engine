@@ -4,17 +4,12 @@
 #ifndef _CHESS_MOVE_ITERATOR_
 #define _CHESS_MOVE_ITERATOR_
 
-#include "chess_ai.h"
 #include "chess_board.h"
+#include "chess_ai_types.h"
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
 
-typedef struct s_chess_move_iteration {
-  ChessBoard_Idx_t dst;
-  ChessPiece_e promotion_flag;
-  Move_Validation_Flag_e special_flags;
-} ChessMoveIteration_t;
 
 typedef struct s_chess_move_iterator_private ChessMoveIterator_PrivateFields_t;
 typedef struct s_chess_move_iterator {
@@ -39,15 +34,15 @@ typedef enum e_chess_move_iterator_moveset_mode {
 
 
 
-BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
+EWRAM_CODE BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
                              ChessBoard_Idx_t piece_location,
                              const BoardState_t *state,
                              ChessMoveIterator_MoveSetMode_e ordering);
 
-BOOL ChessMoveIterator_HasNext(const ChessMoveIterator_t *iterator);
-BOOL ChessMoveIterator_Next(ChessMoveIterator_t *iterator,
+EWRAM_CODE BOOL ChessMoveIterator_HasNext(const ChessMoveIterator_t *iterator);
+EWRAM_CODE BOOL ChessMoveIterator_Next(ChessMoveIterator_t *iterator,
                             ChessMoveIteration_t *ret_mv);
-BOOL ChessMoveIterator_Dealloc(ChessMoveIterator_t *iterator);
+EWRAM_CODE BOOL ChessMoveIterator_Dealloc(ChessMoveIterator_t *iterator);
 
 #ifdef __cplusplus
 }

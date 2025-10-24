@@ -50,7 +50,7 @@ void ChessGame_HumanXHuman_PromotionPrompt(ChessGameCtx_t *ctx,
   OAM_Copy(&OAM_ATTR[pawn_id], obj, 1);
   for (BOOL sel = FALSE, sprchange=TRUE; !sel; 
        sel=(0!=KEY_STROKE(A)), sprchange=TRUE) {
-    IRQ_Sync(1<<IRQ_KEYPAD);
+    IRQ_Sync(IRQ_FLAG(KEYPAD));
     if (KEY_STROKE(LEFT)) {
       --promotion_id;
       promotion_id&=PROMOTION_SEL_MASK;
@@ -99,7 +99,7 @@ Move_Validation_Flag_e ChessGame_HumanXHuman_GetMove(ChessGameCtx_t *ctx,
          !sel; 
          OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS + i], &sels[i], 1),
          Vsync()) {
-      IRQ_Sync(1<<IRQ_KEYPAD);
+      IRQ_Sync(IRQ_FLAG(KEYPAD));
       if ((sel=KEY_STROKE(A))) {
         continue;
       } else if (KEY_STROKE(B)) {

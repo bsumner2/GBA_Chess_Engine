@@ -10,7 +10,36 @@
 
 extern void IRQ_Sync(u32 flags);
 
-
+const char *DebugIO_ChessPiece_ToString(ChessPiece_e piece) {
+  switch (piece) {
+  case WHITE_FLAGBIT:
+    return "WHITE_PAWN";
+  case BLACK_FLAGBIT:
+    return "BLACK_PAWN";
+  case BLACK_BISHOP:
+    return "BLACK_BISHOP";
+  case BLACK_ROOK:
+    return "BLACK_ROOK";
+  case BLACK_KNIGHT:
+    return "BLACK_KNIGHT";
+  case BLACK_QUEEN:
+    return "BLACK_QUEEN";
+  case BLACK_KING:
+    return "BLACK_KING";
+  case WHITE_BISHOP:
+    return "WHITE_BISHOP";
+  case WHITE_ROOK:
+    return "WHITE_ROOK";
+  case WHITE_KNIGHT:
+    return "WHITE_KNIGHT";
+  case WHITE_QUEEN:
+    return "WHITE_QUEEN";
+  case WHITE_KING:
+    return "WHITE_KING";
+  default:
+    return "INVALID_VALUE";
+  }
+}
   
 __attribute__ (( __format__ ( __printf__, 3, 4 ), __noreturn__ ))
 void Debug_PrintfAndExitInternal(const char *__restrict func, u32 line,

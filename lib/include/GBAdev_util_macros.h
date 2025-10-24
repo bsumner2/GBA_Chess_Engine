@@ -18,7 +18,17 @@ extern "C" {
 
 #define ALIGN(alignment) __attribute__ (( aligned(alignment) ))
 #define PACKED __attribute__ (( packed ))
-#define UNUSED __attribute__ (( unused ))
+
+/* Intent util macro suite is meant to provide semantic clarity for 
+ * __attribute__ directives whose sole purpose is to get compiler to stop
+ * warning us about certain code decisions that were made intentionally,
+ * (e.g.: switch fallthroughs, unused function params, etc) */
+
+#define __INTENT__(attr) __INTENT_##attr
+
+#define __INTENT_FALLTHROUGH __attribute__ (( __fallthrough__ ))
+#define __INTENT_UNUSED __attribute__ (( unused ))
+
 
 #define PRINTF_LIKE(fmt_arg_no, first_variadic_arg_no)\
   __attribute__ (( __format__ (__printf__, fmt_arg_no, first_variadic_arg_no) ))

@@ -12,6 +12,7 @@
 extern "C" {
 #endif  /* C++ Name mangler guard */
 
+#define MOVE_VALIDATION_CASTLE_FLAGS_SHAMT 13
 typedef enum e_move_validation_flags {
   MOVE_EN_PASSENT=0x8000,
   MOVE_CASTLE_QUEENSIDE=0x4000,

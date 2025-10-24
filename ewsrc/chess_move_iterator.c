@@ -6,7 +6,6 @@
 #include <assert.h>
 #include "chess_board.h"
 #include "chess_move_iterator.h"
-#include "chess_board_state.h"
 #include "chess_gameloop.h"
 #include "chess_move_iterator_block_allocator.h"
 #include "debug_io.h"
@@ -29,17 +28,6 @@ struct s_chess_move_iterator_private {
 // expect count to never exceed 27
 #define MAX_MOVE_CANDIDATES 27
 
-static IWRAM_BSS ChessMoveIteration_t _L_move_buffer[MAX_MOVE_CANDIDATES];
-
-
-
-
-
-
-// We can do this thanks to GBA being single-threaded.
-static const EWRAM_BSS BoardState_t *_L_cur_board_state=NULL;
-static EWRAM_DATA ChessBoard_Idx_t _L_cur_piece_location = INVALID_IDX;
-
 typedef struct s_INTERNAL_chess_move_iterator InternalMoveIterator_t;
 struct s_INTERNAL_chess_move_iterator {
   Mvmt_Dir_e directions[8];
@@ -59,28 +47,39 @@ struct s_INTERNAL_chess_move_iterator {
   } gp_vals;
   ChessPiece_e piece;
 };
+extern EWRAM_CODE InternalMoveIterator_t *InternalMoveIterator_Init(
+                                    InternalMoveIterator_t *iterator,
+                                    ChessBoard_Idx_t start_loc,
+                                    ChessPiece_e piece_type);
+extern EWRAM_CODE void InternalMoveIterator_Uninit(InternalMoveIterator_t *iterator);
 
-
-extern InternalMoveIterator_t *InternalMoveIterator_Init(
-                                           InternalMoveIterator_t *iterator,
-                                           ChessBoard_Idx_t start_loc,
-                                           ChessPiece_e piece_type);
-extern void InternalMoveIterator_Uninit(InternalMoveIterator_t *iterator);
-
-extern BOOL InternalMoveIterator_HasNext(InternalMoveIterator_t *iterator);
-extern BOOL InternalMoveIterator_Next(InternalMoveIterator_t *iterator,
-                                      ChessMoveIteration_t *dest);
-extern BOOL InternalMoveIterator_IsContinuousMovementIterator(
-                                       const InternalMoveIterator_t *iterator);
-extern BOOL InternalMoveIterator_ContinuousForceNextDirection(
+extern EWRAM_CODE BOOL InternalMoveIterator_HasNext(InternalMoveIterator_t *iterator);
+extern EWRAM_CODE BOOL InternalMoveIterator_Next(InternalMoveIterator_t *iterator,
+                               ChessMoveIteration_t *dest);
+extern EWRAM_CODE BOOL InternalMoveIterator_IsContinuousMovementIterator(
+                                const InternalMoveIterator_t *iterator);
+extern EWRAM_CODE BOOL InternalMoveIterator_ContinuousForceNextDirection(
                                               InternalMoveIterator_t *iterator);
 
-static int Capture_Eval(ChessBoard_Idx_t loc);
-static int Knight_Move_Eval(ChessBoard_Idx_t loc);
-static int Promo_Flag_Eval(int promo_flag);
-static int __MoveIterationCmp(const void *a, const void *b);
+static IWRAM_BSS ChessMoveIteration_t _L_move_buffer[MAX_MOVE_CANDIDATES];
 
-int Capture_Eval(ChessBoard_Idx_t loc) {
+
+
+
+
+
+// We can do this thanks to GBA being single-threaded.
+static const EWRAM_BSS BoardState_t *_L_cur_board_state=NULL;
+static ChessBoard_Idx_t _L_cur_piece_location = INVALID_IDX;
+
+
+
+static EWRAM_CODE int Capture_Eval(ChessBoard_Idx_t loc);
+static EWRAM_CODE int Knight_Move_Eval(ChessBoard_Idx_t loc);
+static EWRAM_CODE int Promo_Flag_Eval(int promo_flag);
+static EWRAM_CODE int __MoveIterationCmp(const void *a, const void *b);
+
+EWRAM_CODE int Capture_Eval(ChessBoard_Idx_t loc) {
   PieceState_Graph_Vertex_t capt_graphnode;
   capt_graphnode 
     = _L_cur_board_state
@@ -90,7 +89,7 @@ int Capture_Eval(ChessBoard_Idx_t loc) {
                 - capt_graphnode.defending_count;
 }
 
-int Knight_Move_Eval(ChessBoard_Idx_t loc) {
+EWRAM_CODE int Knight_Move_Eval(ChessBoard_Idx_t loc) {
   int move_count=0;
   BOOL can_up_tall, can_up_wide, can_down_tall, can_down_wide;
   can_up_wide = can_up_tall = ROW_7 < loc.coord.y;
@@ -144,7 +143,7 @@ int Knight_Move_Eval(ChessBoard_Idx_t loc) {
   return move_count;
 }
 
-int Promo_Flag_Eval(int promo_flag) {
+EWRAM_CODE int Promo_Flag_Eval(int promo_flag) {
   if (!promo_flag)
     return 0;
   switch ((ChessPiece_e)promo_flag) {
@@ -163,7 +162,7 @@ int Promo_Flag_Eval(int promo_flag) {
 }
 
 
-int __MoveIterationCmp(const void *a, const void *b) {
+EWRAM_CODE int __MoveIterationCmp(const void *a, const void *b) {
   const ChessMoveIteration_t *lhs=a, *rhs=b;
   assert(_L_cur_board_state!=NULL);
   ChessPiece_e start_piece, lhs_dst_piece, rhs_dst_piece;
@@ -177,27 +176,32 @@ int __MoveIterationCmp(const void *a, const void *b) {
 
   lhs_empty = (EMPTY_IDX==lhs_dst_piece);
   if (lhs_empty^(EMPTY_IDX==rhs_dst_piece)) {  // 1 operand empty, other not
-    return (EMPTY_IDX==lhs_dst_piece) ? -1 : 1;  // and if lhs is the empty 1,
-                                                 // negative cmp return
+    return lhs_empty ? 1 : -1;  // and if lhs is the empty 1,
+                                                 // positive cmp return. This
+                                                 // is done because we want
+                                                 // better moves at leftmost 
+                                                 // side (lowermost addr),
+                                                 // as iterator iterates 
+                                                 // to right (increment addr)
+                                                 // as we go thru move buf
   }
   if (lhs_empty) {
     // if both spots equal, just evaluate based on distance for cmp, OR
     // (special cases: castle, promo, and knight moving into edge or corner
-
     // Special Cases:
     if (KNIGHT_IDX==start_piece) {
-      return Knight_Move_Eval(lhs->dst) - Knight_Move_Eval(rhs->dst);
+      return Knight_Move_Eval(rhs->dst) - Knight_Move_Eval(lhs->dst);
     } else if (KING_IDX==start_piece || PAWN_IDX==start_piece) {
       if (PAWN_IDX==start_piece) {
         if (lhs->promotion_flag != rhs->promotion_flag) {
           // THis works because default value of ZERO means no promo occurred,
           // and then promotion_flag
-          return Promo_Flag_Eval(lhs->promotion_flag) 
-                      - Promo_Flag_Eval(rhs->promotion_flag);
+          return Promo_Flag_Eval(rhs->promotion_flag)
+                  - Promo_Flag_Eval(lhs->promotion_flag);
         }
       }
       if (MOVE_SPECIAL_MOVE_FLAGS_MASK&lhs->special_flags) {
-        return MOVE_SPECIAL_MOVE_FLAGS_MASK&rhs->special_flags ? 0 : 1;
+        return MOVE_SPECIAL_MOVE_FLAGS_MASK&rhs->special_flags ? 1 : 0;
       } else if (MOVE_SPECIAL_MOVE_FLAGS_MASK&rhs->special_flags) {
         return -1;
       }
@@ -213,16 +217,17 @@ int __MoveIterationCmp(const void *a, const void *b) {
     dy = rhs->dst.arithmetic.y - _L_cur_piece_location.arithmetic.y;
     rhs_dist_magnitude = dx*dx + dy*dy;
     assert(lhs_dist_magnitude>0 && rhs_dist_magnitude>0);
-    return lhs_dist_magnitude - rhs_dist_magnitude;
+    return rhs_dist_magnitude - lhs_dist_magnitude;
 
   }
-  return Capture_Eval(lhs->dst) - Capture_Eval(rhs->dst);
+  return Capture_Eval(rhs->dst) - Capture_Eval(lhs->dst);
+
 
   
   
   
 }
-BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
+EWRAM_CODE BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
                              ChessBoard_Idx_t piece_location,
                              const BoardState_t *state,
                              ChessMoveIterator_MoveSetMode_e mode) {
@@ -252,7 +257,7 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
       MAX_MOVE_CANDIDATES*sizeof(ChessMoveIteration_t)/sizeof(WORD));
   while (InternalMoveIterator_HasNext(&iter)) {
     assert(InternalMoveIterator_Next(&iter, &cur_mv));
-#if 0
+#if 1
     assert(0ULL==(cur_mv.dst.raw&INVALID_IDX_MASK));
 #else
     if (0ULL!=(cur_mv.dst.raw&INVALID_IDX_MASK)) {
@@ -290,7 +295,6 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
 #endif
     curpiece = BOARD_DATA[BOARD_IDX(cur_mv.dst)];
     if (MOVE_SPECIAL_MOVE_FLAGS_MASK&cur_mv.special_flags) {
-      BOOL invalid_mv = TRUE;
       if (MOVE_CASTLE_MOVE_FLAGS_MASK&cur_mv.special_flags) {
         ChessBoard_Idx_t check_against;
         u32 flag;
@@ -347,7 +351,7 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
         check_against.arithmetic.x += dx;
         for (i32 file = check_against.arithmetic.x; FILE_E!=file;
              check_against.arithmetic.x = (file+=dx)) {
-          ensure((VALID_FILE_MASK&file)==file, "file = \x1b[0x44E4]%ld\x1b[0x1484]\nVALID_FILE_MASK&file = \x1b[0x44E4]%lu\x1b[0x1484]", file, file&VALID_FILE_MASK);
+          ensure((VALID_FILE_MASK&file)==(u32)file, "file = \x1b[0x44E4]%ld\x1b[0x1484]\nVALID_FILE_MASK&file = \x1b[0x44E4]%lu\x1b[0x1484]", file, file&VALID_FILE_MASK);
           if (EMPTY_IDX!=BOARD_DATA[BOARD_IDX(check_against)]) {
             valid = FALSE;
             break;
@@ -390,8 +394,7 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
       if (MV_FILE == piece_location.coord.x) {
         if (EMPTY_IDX!=curpiece)
           continue;
-      }
-      if (EMPTY_IDX==curpiece) {
+      } else if (EMPTY_IDX==curpiece) {
         if (MV_FILE==state->state.ep_file) {
           const ChessBoard_Row_e STARTING_ROW = piece_location.coord.y;
           if (WHITE_FLAGBIT==ALLIED_TEAM_FLAGBIT) {
@@ -409,8 +412,10 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
               continue;
             assert(ROW_4==STARTING_ROW);  // Same logic here too.
           }
-          assert((OPP_TEAM_FLAGBIT|PAWN_IDX)!=BOARD_DATA[STARTING_ROW][MV_FILE]);
+          assert((OPP_TEAM_FLAGBIT|PAWN_IDX)==BOARD_DATA[STARTING_ROW][MV_FILE]);
           cur_mv.special_flags |= MOVE_CAPTURE|MOVE_EN_PASSENT;
+        } else {
+          continue;
         }
       }
     }
@@ -420,7 +425,13 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
         _L_move_buffer[count++] = cur_mv;
         continue;
       }
-      assert(curpiece&PIECE_TEAM_MASK);
+      ensure(curpiece&PIECE_TEAM_MASK, 
+          "curpiece = \x1b[0x44E4]0x%04hX\x1b[0x1484]"
+          "\n\t(\x1b[0x44E4]%s\x1b[0x1484])\n"
+          "curpiece was at ( \x1b[0x44E4]%u\x1b[0x1484], "
+          "\x1b[0x44E4]%u\x1b[0x1484] )",
+          curpiece, DebugIO_ChessPiece_ToString(curpiece), cur_mv.dst.coord.x,
+          cur_mv.dst.coord.y);
       if (InternalMoveIterator_IsContinuousMovementIterator(&iter))
         assert(InternalMoveIterator_ContinuousForceNextDirection(&iter));
       if (curpiece&ALLIED_TEAM_FLAGBIT) {
@@ -505,7 +516,7 @@ BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
   return TRUE;
 }
 
-BOOL ChessMoveIterator_HasNext(const ChessMoveIterator_t *iterator) {
+EWRAM_CODE BOOL ChessMoveIterator_HasNext(const ChessMoveIterator_t *iterator) {
   assert(NULL!=iterator);
   if (NULL==iterator->priv) {
     assert(0==iterator->size);
@@ -515,7 +526,7 @@ BOOL ChessMoveIterator_HasNext(const ChessMoveIterator_t *iterator) {
   return iterator->size > iterator->priv->cur_move;
 }
 
-BOOL ChessMoveIterator_Next(ChessMoveIterator_t *iterator,
+EWRAM_CODE BOOL ChessMoveIterator_Next(ChessMoveIterator_t *iterator,
                             ChessMoveIteration_t *ret_mv) {
   if (!ChessMoveIterator_HasNext(iterator))
     return FALSE;
@@ -526,7 +537,7 @@ BOOL ChessMoveIterator_Next(ChessMoveIterator_t *iterator,
   return TRUE;
 }
 
-BOOL ChessMoveIterator_Dealloc(ChessMoveIterator_t *iterator) {
+EWRAM_CODE BOOL ChessMoveIterator_Dealloc(ChessMoveIterator_t *iterator) {
   if (NULL==iterator)
     return FALSE;
   if (NULL==iterator->priv) {

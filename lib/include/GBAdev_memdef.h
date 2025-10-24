@@ -169,6 +169,17 @@ extern "C" {
 #define REG_FLAG(regname, flagname) \
   (regname##_##flagname##_FLAGBIT)
 #define REG_VALUE(regname, flagname, value) ((value<<regname##_##flagname##_SHAMT)&regname##_##flagname##_MASK)
+#define IRQ_FLAG(irq) (1<<IRQ_##irq)
+
+
+#define REG_FLAGS(regname, ...)\
+  (__VA_OPT__(EXPAND(REG_FLAGS_HELPER (regname, __VA_ARGS__))))
+#define REG_VALUES(regname, ...)\
+  (__VA_OPT__(EXPAND(REG_VALUES_HELPER(regname, __VA_ARGS__))))
+#define IRQ_FLAGS(...)\
+  (__VA_OPT__(EXPAND(IRQ_FLAGS_HELPER(__VA_ARGS__))))
+
+
 /* Use these if you want more descriptive indicators when setting values in
  * one of the register bitfield struct bool type, 1b, fields. */
 #define TRUE 1U
@@ -211,6 +222,34 @@ extern "C" {
 #define TIMER_FREQ_64HZ             1
 #define TIMER_FREQ_256HZ            2
 #define TIMER_FREQ_1024HZ           3
+
+// I freaking hate this hack so much omg. Why like why is this necessary???
+// All this baggage is necessary for REG_VALUES and REG_FLAGS to 
+// work properly, but I just don't even understand HOW NOR WHY
+
+#define PARENTHESIS ()
+
+#define EXPAND(...) EXPAND4(EXPAND4(EXPAND4(EXPAND4(__VA_ARGS__))))
+#define EXPAND4(...) EXPAND3(EXPAND3(EXPAND3(EXPAND3(__VA_ARGS__))))
+#define EXPAND3(...) EXPAND2(EXPAND2(EXPAND2(EXPAND2(__VA_ARGS__))))
+#define EXPAND2(...) EXPAND1(EXPAND1(EXPAND1(EXPAND1(__VA_ARGS__))))
+#define EXPAND1(...) __VA_ARGS__
+
+#define REG_FLAGS_HELPER(regname, f1, ...)\
+  (regname##_##f1##_FLAGBIT)\
+  __VA_OPT__(|REG_FLAGS_TERTIARY PARENTHESIS (regname, __VA_ARGS__))
+#define REG_FLAGS_TERTIARY() REG_FLAGS_HELPER
+
+
+#define REG_VALUES_HELPER(regname, fieldname, value, ...)\
+  ((value<<regname##_##fieldname##_SHAMT)&regname##_##fieldname##_MASK)\
+  __VA_OPT__(|REG_VALUES_TERTIARY PARENTHESIS (regname, __VA_ARGS__))
+#define REG_VALUES_TERTIARY() REG_VALUES_HELPER
+
+#define IRQ_FLAGS_HELPER(irq0, ...)\
+  (1<<IRQ_##irq0)\
+  __VA_OPT__(|IRQ_FLAGS_TERTIARY PARENTHESIS (__VA_ARGS__))
+#define IRQ_FLAGS_TERTIARY() IRQ_FLAGS_HELPER
 
 
 #ifdef __cplusplus

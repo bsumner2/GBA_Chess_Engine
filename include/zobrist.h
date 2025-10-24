@@ -24,7 +24,7 @@ typedef enum e_zobrist_piece_id {
 
 #define ZID_FROM_BOARD_PIECE_DATA(piece)\
   (EMPTY_IDX==piece\
-      ? -1\
+      ? 0xFFFFFFFFUL\
       : (PIECE_IDX_MASK&piece)\
             + ((WHITE_FLAGBIT&piece) ? 0 : 6))
 

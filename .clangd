@@ -2,7 +2,8 @@
 CompileFlags:
   Add: [ -xc, -std=c23, -Wall, -Wextra, -Wno-empty-translation-unit, 
     -Wno-unknown-attributes, -pedantic, -I../include, 
-    -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include
+    -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include,
+    -D_DEBUG_BUILD_
   ]
   Compiler: arm-none-eabi-gcc
 ---
@@ -12,7 +13,8 @@ If:
 CompileFlags:
   Add: [ -xc++, -std=c++23, -Wall, -Wextra, -Wno-empty-translation-unit, 
         -Wno-unknown-attributes, -pedantic, -I../include, 
-        -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include 
+        -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include,
+        -D_DEBUG_BUILD_
   ]
   Compiler: arm-none-eabi-g++
 ---

@@ -428,19 +428,19 @@ void ChessGame_NotifyInvalidMove(Obj_Attr_t *mvmt, int idx) {
   REG_TM[0] = timer_control;
   u16 enable_bit = ((Timer_Cnt_t){.fields={.enable=TRUE}}).raw;
   REG_IME = 0;
-  REG_IE |= 1<<IRQ_TIMER0;
+  REG_IE |= IRQ_FLAG(TIMER0);
   REG_IME = 1;
   for (int i = 0,j; i < 6; ++i) {
     for (j=0; j < 5; ++j) {
       REG_TM[0].cnt_reg.raw |= enable_bit;
-      IRQ_Sync(1<<IRQ_TIMER0);
+      IRQ_Sync(IRQ_FLAG(TIMER0));
       REG_TM[0] = timer_control;
     }
     mvmt->attr0.regular.disable^=TRUE;
     OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+idx], mvmt, 1);
   }
   REG_IME = 0;
-  REG_IE ^= 1<<IRQ_TIMER0;
+  REG_IE ^= IRQ_FLAG(TIMER0);
   REG_IME = 1;
   mvmt->attr2.sprite_idx -= TILES_PER_CSPR*2*Chess_sprites_Glyph_Count;
   OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+idx], mvmt, 1);
@@ -494,9 +494,6 @@ BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx,
   };
   const ChessBoard_Row_t *board_data = ctx->board_data;
   const ChessBoard_Idx_t ORIGIN = prospective_blocker->location;
-  u32 ally_flag,
-      opp_flag;
-  
   ChessPiece_e mpiece;
   Mvmt_Dir_e checking_dir = ChessBoard_MoveGetDir((
                                 ChessBoard_Idx_t[2]){
@@ -507,8 +504,6 @@ BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx,
     assert((0!=(VER_MASK&checking_dir)) ^ (0!=(HOR_MASK&checking_dir)));
   }
   mpiece = GET_BOARD_AT_IDX(board_data, ORIGIN);
-  ally_flag = mpiece&PIECE_TEAM_MASK,
-  opp_flag  = ally_flag^PIECE_TEAM_MASK;
   int ct = 0;
   switch (mpiece&PIECE_IDX_MASK) {
   case PAWN_IDX:
@@ -568,8 +563,14 @@ BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx,
     return FALSE;
 #else
     ChessBoard_Idx_t idxs[2], 
-                     auxmove[2] = {{0}, king->location},
-                     auxmove2[2] = {checking_piece->location, {0}};
+                     auxmove[2] = {
+                       { .raw = 0ULL },
+                       king->location
+                     },
+                     auxmove2[2] = {
+                       checking_piece->location, 
+                       { .raw = 0ULL }
+                     };
     bool valids[2];
     if (ChessGame_PawnCanDoubleForward(ctx, prospective_blocker)) {
       valids[0] = TRUE;
@@ -768,7 +769,11 @@ BOOL ChessGame_PieceCanBlock(const ChessGameCtx_t *ctx,
   }
   assert(0!=ct && 8 >= ct);
   Mvmt_Dir_e curmv;
-  ChessBoard_Idx_t auxmove[2] = {{0}, king->location}, auxmove2[2];
+  ChessBoard_Idx_t auxmove[2] = {
+                        { .raw = 0ULL },
+                        king->location
+                      }, 
+                   auxmove2[2];
   ChessBoard_Idx_t lim;
   int dx, dy;
   for (int i = 0; ct > i; ++i) {

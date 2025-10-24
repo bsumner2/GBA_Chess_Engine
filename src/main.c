@@ -120,7 +120,7 @@ int main(void) {
         | KEY_SEL
       );
   REG_ISR_MAIN = ChessGameloop_ISR_Handler;
-  REG_IE |= (1<<IRQ_VBLANK)|(1<<IRQ_KEYPAD);
+  REG_IE |= (IRQ_FLAG(VBLANK))|(IRQ_FLAG(KEYPAD));
   REG_IME = 1;
   context.move_selections[0].coord = (struct s_chess_coord) {
     .x=FILE_B, .y=ROW_1
@@ -142,7 +142,7 @@ int main(void) {
   REG_IME=0;
   REG_DPY_STAT|=REG_FLAG(DPY_STAT, VBL_IRQ);
   REG_ISR_MAIN = ISR_Handler_Basic;
-  REG_IE|=(1<<IRQ_VBLANK);
+  REG_IE|=(IRQ_FLAG(VBLANK));
   REG_IME=1;
   mode3_printf(0,0,0x10A5, "sizeof(\x1b[0x328A]ChessBoard_Row_e\x1b[0x10A5]) = \x1b[0x2E1F]%zu\x1b[0x10A5]", sizeof(ChessBoard_Row_e));
   do SUPERVISOR_CALL(0x05); while (1);
@@ -152,20 +152,17 @@ int main(void) {
     REG_DPY_CNT = REG_FLAG(DPY_CNT, BG2)|REG_VALUE(DPY_CNT, MODE, 3);
     REG_IME = 0;
     REG_DPY_STAT |= REG_FLAG(DPY_STAT, VBL_IRQ);
-    REG_KEY_CNT |= REG_FLAG(KEY_CNT, BWISE_AND)|REG_FLAG(KEY_CNT, IRQ)|ALL_KEYS;
-    REG_KEY_CNT &= (u16)~(REG_FLAG(KEY_CNT, BWISE_AND)
-          | KEY_L
-          | KEY_R
-          | KEY_SEL
-        );
+    REG_KEY_CNT |= REG_FLAGS(KEY_CNT, IRQ)|ALL_KEYS;
+
+    REG_KEY_CNT &= ~REG_FLAGS(KEY_CNT, BWISE_AND, L, R, SEL);
+
     REG_ISR_MAIN = ChessGameloop_ISR_Handler;
-    REG_IE |= (1<<IRQ_VBLANK)|(1<<IRQ_KEYPAD);
+    REG_IE |= IRQ_FLAGS(VBLANK, KEYPAD);
     REG_IME = 1;
     M3_SelScreen(0, -1);
-    for (int prev=0, cur=0, undecided=TRUE; IRQ_Sync(1<<IRQ_KEYPAD), 1; Vsync()) {
-      IRQ_Sync(1<<IRQ_KEYPAD);
+    for (int prev=0, cur=0; IRQ_Sync(IRQ_FLAG(KEYPAD)), 1; Vsync()) {
+      IRQ_Sync(IRQ_FLAG(KEYPAD));
       if (KEY_STROKE(A)) {
-        undecided = FALSE;
         switch ((GameModeSelection_e)cur) {
           case GAME_MODE_2PLAYER:
             cpu_team_side = 0;
@@ -198,10 +195,8 @@ int main(void) {
 
     REG_BLEND_CNT = REG_FLAG(BLEND_CNT, LAYER_B_BG0)
                       | REG_VALUE(BLEND_CNT, BLEND_MODE, BLEND_MODE_ALPHA);
-    REG_BLEND_ALPHA = REG_VALUE(BLEND_ALPHA, LAYER_B_WEIGHT, 4)|REG_VALUE(BLEND_ALPHA, LAYER_A_WEIGHT, 10);
-    REG_DPY_CNT = REG_FLAG(DPY_CNT, BG0)
-                      | REG_FLAG(DPY_CNT, OBJ)
-                      | REG_FLAG(DPY_CNT, OBJ_1D);
+    REG_BLEND_ALPHA = REG_VALUES(BLEND_ALPHA, LAYER_B_WEIGHT, 4, LAYER_A_WEIGHT, 10);
+    REG_DPY_CNT = REG_FLAGS(DPY_CNT, BG0, OBJ, OBJ_1D);
     ChessBG_Init();
     ChessGameCtx_Init(&context);
     if (0!=cpu_team_side) {
@@ -237,7 +232,7 @@ int main(void) {
           0x10A5,
           STALEMATE_MSG);
     }
-    do IRQ_Sync(1<<IRQ_KEYPAD); while (!KEY_STROKE(START));
+    do IRQ_Sync(IRQ_FLAG(KEYPAD)); while (!KEY_STROKE(START));
     ChessGameCtx_Close(&context);
     if (ai_board_state_tracker) {
       ChessAI_Params_Uninit(&ai);

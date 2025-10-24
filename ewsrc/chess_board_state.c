@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include "chess_board_state.h"
 #include "GBAdev_util_macros.h"
+#include "chess_ai_types.h"
 #include "chess_board.h"
 #include "chess_move_iterator.h"
 #include "chess_ai.h"
@@ -118,7 +119,7 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
     }, 
     .move_outcome=MOVE_UNSUCCESSFUL,
     .roster_id = 0xFFFFU,
-    .promotion = 0xFFFFFFFFU,
+    .promotion = 0xFFFFU,
   };
   GameState_t *state = &board_state->state;
   const PGN_Round_LL_t *move_hist = &ctx->move_hist;
@@ -231,8 +232,8 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
      * that castle_rights = ZOBRIST_CASTLE_ID_MASK&ACTIVE_HIGH(castle_rights).
      * so then we set state->castle_rights = castle_rights
      */
-    castle_rights ^= ZOBRIST_CASTLE_ID_MASK;
-    state->castle_rights = castle_rights;
+    castle_rights=~castle_rights;
+    state->castle_rights = (castle_rights&=ZOBRIST_CASTLE_ID_MASK);
   }
   // assert castle_rights is repping a valid state
   assert((castle_rights&ZOBRIST_CASTLE_ID_MASK) == castle_rights);
@@ -250,8 +251,11 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
   if (BLACK_TO_MOVE_FLAGBIT&whose_move)
     zobrist_key^=SIDE_TO_MOVE_ZKEY_ENT(zobrist_table);
   zobrist_key^=CASTLE_ZKEY_ENTS(zobrist_table)[castle_rights];
-  if (En_Passent_Possible(ctx->board_data, whose_move, state->ep_file))
+  if (En_Passent_Possible(ctx->board_data, whose_move, state->ep_file)) {
     zobrist_key^=EN_PASSENT_ZKEY_ENTS(zobrist_table)[state->ep_file];
+  } else {
+    state->ep_file = NO_VALID_EN_PASSENT_FILE;
+  }
   board_state->zobrist = zobrist_key;
   
   return Graph_FromCtx(board_state, ctx);
@@ -343,24 +347,31 @@ EWRAM_CODE BoardState_t *Graph_FromCtx(BoardState_t *board_state,
 }
 
 EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
-                                        const ChessBoard_Idx_Compact_t move[2],
-                                        Move_Validation_Flag_e flags) {
+                                       const ChessMoveIteration_t *move_data,
+                                       ChessBoard_Idx_Compact_t start_pos) {
   // Update graph.hashmap[move[0]] = PIECE_GRAPH_EMPTY_HASHENT
   // Update graph.hashmap[move[1]] = moving_idx
   // Update graph.vertices[moving_idx].location = move[1], but only after
   // lazy deleting of captured piece if there is one at move[1]
+  const ChessBoard_Idx_t move[2] = {
+    BOARD_IDX_CONVERT(start_pos, NORMAL_IDX_TYPE),
+    move_data->dst,
+  };
   u32 moving_idx = board_state->graph.vertex_hashmap[BOARD_IDX(move[0])];
   ChessPiece_e moving_piece = board_state->board[BOARD_IDX(move[0])],
                moving_side = (moving_idx&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT
                   ? WHITE_FLAGBIT
                   : BLACK_FLAGBIT), moving_piece_type;
+  Move_Validation_Flag_e flags = move_data->special_flags;
   moving_piece_type = moving_piece&PIECE_IDX_MASK;
+
+  assert((moving_piece_type|moving_side)==moving_piece);
   assert(moving_side&moving_piece);
   board_state->graph.vertex_hashmap[BOARD_IDX(move[0])]
     = PIECE_GRAPH_EMPTY_HASHENT;
   assert (PIECE_GRAPH_EMPTY_HASHENT != moving_idx);
   if (MOVE_CAPTURE&flags) {
-    ChessBoard_Idx_t capt_loc = BOARD_IDX_CONVERT(move[1], NORMAL_IDX_TYPE);
+    ChessBoard_Idx_t capt_loc = move[1];
     u32 captured_idx;
     u8 *captured_vertex_hashent;
     ChessPiece_e captured_piece;
@@ -404,6 +415,7 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
       rook_idx = ROOK1;
       castle_rights_flagbit = KINGSIDE_SHAMT_INVARIANT;
     }
+    assert(0!=(board_state->state.castle_rights&castle_rights_flagbit));
     if (moving_idx&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT) {
       board_state->state.castle_rights ^=(WK|WQ);
       rook_idx |= PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT;
@@ -416,7 +428,6 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
       castle_rights_flagbit <<= CASTLE_RIGHTS_BLACK_FLAGS_SHAMT;
       rook_piece |= BLACK_FLAGBIT;
     }
-    assert(0!=(board_state->state.castle_rights&castle_rights_flagbit));
     rook_vertex = &board_state->graph.vertices[rook_idx];
     assert(((const u8)board_state->graph.vertex_hashmap[BOARD_IDX(rook_start)])
                             ==rook_idx);
@@ -438,21 +449,27 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
   // Now that captured piece is taken care of, we can update hashmap[move[1]]
   // safely.
   board_state->graph.vertex_hashmap[BOARD_IDX(move[1])] = moving_idx;
+  if (0!=move_data->promotion_flag) {
+    assert(PAWN_IDX==moving_piece_type);
+    moving_piece = move_data->promotion_flag;
+  }
+
   board_state->board[BOARD_IDX(move[1])] = moving_piece;
-  ensure(board_state->graph.vertices[moving_idx].location.raw==move[0].raw,
+  ensure(board_state->graph.vertices[moving_idx].location.raw==start_pos.raw,
     "state graph says location of vertex = "
     "{.raw=\x1b[0x44E4]0x%02hhX\x1b[0x1484]}.\nMove idxs are:\n\t"
-    "[0] = {.raw=\x1b[0x44E4]0x%02hhX\x1b[0x1484]},\t[1] = "
-    "{.raw=\x1b[0x44E4]0x%02hhX\x1b[0x1484]}",
+    "[0] = {.raw=\x1b[0x44E4]0x%016llX\x1b[0x1484]},\t[1] = "
+    "{.raw=\x1b[0x44E4]0x%016llX\x1b[0x1484]}",
     board_state->graph.vertices[moving_idx].location.raw,
     move[0].raw, move[1].raw);
-  board_state->graph.vertices[moving_idx].location = move[1];
+  board_state->graph.vertices[moving_idx].location = BOARD_IDX_CONVERT(move[1], 
+                                                             COMPACT_IDX_TYPE);
   board_state->board[BOARD_IDX(move[0])] = EMPTY_IDX;
   do {
     int shamt = (moving_idx&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT)
                             ? CASTLE_RIGHTS_WHITE_FLAGS_SHAMT
                             : CASTLE_RIGHTS_BLACK_FLAGS_SHAMT,
-        team_invariant_mvidx = moving_idx&PIECE_ROSTER_ABS_ID_MASK;
+        team_invariant_mvidx = moving_idx&PIECE_ROSTER_ID_MASK;
     // If all castle rights already forfeit, no point in doing this
     if (0==(board_state->state.castle_rights
           &(CASTLE_RIGHTS_SHAMT_INVARIANT<<shamt)))
@@ -464,9 +481,8 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
     if (KING_IDX==moving_piece_type)
       assert(KING==team_invariant_mvidx);
     else
-      assert(ROOK_IDX==moving_piece_type 
-          && (ROOK0==team_invariant_mvidx || ROOK1==team_invariant_mvidx));
-    if (ROOK0==moving_idx) {
+      assert(ROOK0==team_invariant_mvidx || ROOK1==team_invariant_mvidx);
+    if (ROOK0==team_invariant_mvidx) {
       board_state->state.castle_rights&=~(QUEENSIDE_SHAMT_INVARIANT<<shamt);
     } else if (ROOK1==team_invariant_mvidx) {
       board_state->state.castle_rights&=~(KINGSIDE_SHAMT_INVARIANT<<shamt);
@@ -477,33 +493,41 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
     }
   } while (0);
   if (MOVE_PAWN_TWO_SQUARE&flags) {
-    ChessBoard_Idx_Compact_t adjs[2] = {
-      INVALID_IDX_COMPACT,
-      INVALID_IDX_COMPACT
-    };
+    const ChessBoard_File_e EP_CANDIDATE_FILE = move[1].coord.x;
+    const ChessBoard_Row_e EP_CANDIDATE_ROW = move[1].coord.y;
     const ChessPiece_e ENEMY_PAWN = PAWN_IDX|(moving_side^PIECE_TEAM_MASK);
+    ChessBoard_Idx_Compact_t adjs[2];
+    const ChessBoard_Idx_Compact_t 
+          EP_CANDIDATE_COORD = BOARD_IDX_CONVERT(move[1], COMPACT_IDX_TYPE);
+    adjs[0] = adjs[1] = EP_CANDIDATE_COORD;
 
-    if (FILE_A<move[0].coord.x) {
-      adjs[0] = move[0];
+
+
+    assert(move[0].coord.x==EP_CANDIDATE_FILE);
+    if (moving_side==WHITE_FLAGBIT) {
+      assert(EP_CANDIDATE_ROW==ROW_4);
+    } else {
+      assert(EP_CANDIDATE_ROW==ROW_5);
+    }
+    if (FILE_A<EP_CANDIDATE_FILE) {
       --adjs[0].coord.x;
     }
-    if (FILE_H>move[0].coord.x) {
-      adjs[1] = move[0];
+    if (FILE_H>EP_CANDIDATE_FILE) {
       ++adjs[1].coord.x;
     }
     board_state->state.ep_file = NO_VALID_EN_PASSENT_FILE;
     for (int i = 0; 2>i;++i) {
-      if (INVALID_IDX_COMPACT_RAW==adjs[i].raw)
+      if (EP_CANDIDATE_COORD.raw==adjs[i].raw)
         continue;
       if (ENEMY_PAWN!=board_state->board[BOARD_IDX(adjs[i])])
         continue;
-      board_state->state.ep_file = move[0].coord.x;
+      board_state->state.ep_file = move[1].coord.x;
       break;
     }
   } else {
     board_state->state.ep_file = NO_VALID_EN_PASSENT_FILE;
   }
-  if (BLACK_FLAGBIT==moving_side)  
+  if (BLACK_FLAGBIT==moving_side)
     ++board_state->state.fullmove_number;
   if (PAWN_IDX==moving_piece_type || MOVE_CAPTURE&flags)
     board_state->state.halfmove_clock = 0;
@@ -555,6 +579,7 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
   u32 hit_idx;
   const ChessPiece_Roster_t roster = board_state->graph.roster;
   ChessPiece_e curpiece;
+  ChessBoard_Idx_Compact_t hit_loc;
   for (u32 white_cardinality, black_cardinality, total, i = 0;
        CHESS_TOTAL_PIECE_COUNT>i; 
        ++i) {
@@ -568,11 +593,24 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
     cur_adjbits.all = 0;
     while (ChessMoveIterator_HasNext(&iterator)) {
       assert(ChessMoveIterator_Next(&iterator, &mv_iter));
-      assert(EMPTY_IDX!=board[BOARD_IDX(mv_iter.dst)]);
-      hit_idx = vmap[BOARD_IDX(mv_iter.dst)];
+      if (MOVE_EN_PASSENT&mv_iter.special_flags) {
+        const ChessBoard_Idx_Compact_t EP_LOC = {
+          .coord = {
+            .x=board_state->state.ep_file,
+            .y=cur_loc.coord.y
+          }
+        };
+        ChessPiece_e cappiece = board[BOARD_IDX(EP_LOC)];
+        assert(EMPTY_IDX==board[BOARD_IDX(mv_iter.dst)]);
+        assert((cappiece^PIECE_TEAM_MASK)==curpiece);
+        hit_loc = EP_LOC;
+      } else {
+        assert(EMPTY_IDX!=board[BOARD_IDX(mv_iter.dst)]);
+        hit_loc = BOARD_IDX_CONVERT(mv_iter.dst, COMPACT_IDX_TYPE);
+      }
+      hit_idx = vmap[BOARD_IDX(hit_loc)];
       assert(PIECE_GRAPH_EMPTY_HASHENT!=hit_idx);
-      assert(BOARD_IDX_CONVERT(mv_iter.dst, COMPACT_IDX_TYPE).raw
-                    ==vertices[hit_idx].location.raw);
+      assert(hit_loc.raw==vertices[hit_idx].location.raw);
       assert(CHESS_ROSTER_PIECE_ALIVE(roster, hit_idx));
       cur_adjbits.all|=(1<<hit_idx);
     }
@@ -592,3 +630,4 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
   }
   return board_state;
 }
+

@@ -7,6 +7,7 @@
 #include <GBAdev_memdef.h>
 
 #include "chess_board.h"
+#include "GBAdev_util_macros.h"
 #include "chess_sprites.h"
 #include "chess_obj_sprites_data.h"
 #include "graph.h"
@@ -21,7 +22,7 @@ static void ChessObj_Init_Team_Pieces(ChessObj_Team_t obj_data,
 static void ChessObj_Init_Sel_Pieces(ChessObj_Mvmt_Sel_t sel_objs);
 
 static void ChessObj_Init_All_Pieces(ChessObj_Set_t *obj_data,
-    Graph_t *piece_graph);
+                                     Graph_t *piece_graph);
 static void ChessBoard_Init(ChessBoard_t);
 
 
@@ -70,7 +71,7 @@ void ChessGameCtx_Init(ChessGameCtx_t *ctx) {
   ctx->whose_turn = WHITE_FLAGBIT;
   ctx->tracker = (ChessPiece_Tracker_t){
       .roster = { .all = ~0 },
-      .pieces_captured = {0},
+      .pieces_captured = {{0},{0}},
       .capcount = {0},
       .piece_graph = Graph_Init(NULL,
                                 NULL,
@@ -922,29 +923,29 @@ BOOL ChessBoard_ValidateMoveClearance(const ChessBoard_t board_data,
     return TRUE;
   if (dir&INVALID_MVMT_FLAGBIT)
     return FALSE;
-  const int dx, dy;
+  int dx, dy;
   switch (dir&VER_MASK) {
   case UP_FLAGBIT:
-    *(int*)(&dy) = -1;
+    dy = -1;
     break;
   case DOWN_FLAGBIT:
-    *(int*)(&dy) = 1;
+    dy = 1;
     break;
   case 0:
-    *(int*)(&dy) = 0;
+    dy = 0;
     break;
   default:
     return FALSE;
   }
   switch (dir&HOR_MASK) {
   case LEFT_FLAGBIT:
-    *(int*)(&dx) = -1;
+    dx = -1;
     break;
   case RIGHT_FLAGBIT:
-    *(int*)(&dx) = 1;
+    dx = 1;
     break;
   case 0:
-    *(int*)(&dx) = 0;
+    dx = 0;
     break;
   default:
     return FALSE;
@@ -1085,6 +1086,7 @@ BOOL ChessBoard_ValidateKingMoveEvadesOpp(
   case BISHOP_IDX:
     if (!(DIAGONAL_MVMT_FLAGBIT&attack_dir))
       return TRUE;
+  __INTENT__(FALLTHROUGH);
   case QUEEN_IDX:
     if (KNIGHT_MVMT_FLAGBIT&attack_dir)
       return TRUE;
@@ -1173,25 +1175,25 @@ bool ChessBoard_FindNextObstruction(const ChessBoard_t board_data,
   case DOWN_FLAGBIT: 
     dy = 1;
     break;
+  default:
+    assert(HOR_MASK!=(HOR_MASK&dir));
+  __INTENT__(FALLTHROUGH);
   case 0:
     dy = 0;
     break;
-  default:
-    assert(HOR_MASK!=(HOR_MASK&dir));
-    break;
   }
   switch (HOR_MASK&dir) {
-  case LEFT_FLAGBIT: 
+  case LEFT_FLAGBIT:
     dx = -1;
     break;
   case RIGHT_FLAGBIT: 
     dx = 1;
     break;
-  case 0:
-    dx = 0;
-    break;
   default:
     assert(VER_MASK!=(VER_MASK&dir));
+  __INTENT__(FALLTHROUGH);
+  case 0:
+    dx = 0;
     break;
   }
   

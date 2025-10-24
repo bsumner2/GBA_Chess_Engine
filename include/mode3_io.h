@@ -5,7 +5,8 @@
 #ifndef _MODE3_IO_H_
 #define _MODE3_IO_H_
 
-
+#define TXT_IO_COLOR_FMT(color)\
+  "\x1b[" #color "]"
 #ifdef __cplusplus
 extern "C" {
 #define restrict

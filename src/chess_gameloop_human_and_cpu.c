@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include "chess_ai.h"
 #include "chess_board_state.h"
-#include "chess_move_iterator.h"
 #include "debug_io.h"
 #include "graph.h"
 #include "key_status.h"
@@ -35,10 +34,30 @@ static void ChessGame_AIXHuman_UpdateBoardAndGraph(ChessGameCtx_t *ctx,
 static void ChessGame_AIXHuman_UpdateVertexEdges(const ChessBoard_t board_data, 
                                         Graph_t *pgraph,
                                         GraphNode_t *moving_vert);
+static void ChessGame_RestoreSpritesToCtxLayout(const ChessGameCtx_t *ctx);
 
+#ifdef _DEBUG_BUILD_
+#define _AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_
+#endif
+
+#ifdef _AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_
+extern IWRAM_CODE void ChessAI_SpriteDataFromCtx(const ChessGameCtx_t *ctx);
+#else
+#define ChessAI_SpriteDataFromCtx(dummy_field)
+#endif  /* defined(_AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_) */
 
 #define PROMOTION_SEL_MASK 3
 extern const ChessPiece_e PROMOTION_SEL[4];
+
+void ChessGame_RestoreSpritesToCtxLayout(const ChessGameCtx_t *ctx) {
+  OAM_Copy(OAM_ATTR, ctx->obj_data.pieces[0], CHESS_TOTAL_PIECE_COUNT);
+  // Have to do two separate calls, since they're aligned weirdly to keep
+  // OAM_Init functional, which relies on 4 OAM alignment to simultaneously
+  // initialize both OAM attrs and the affine transform data entries 
+  // interleaved between them
+  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS], ctx->obj_data.sels, 2);
+}
+
 void ChessGame_AIXHuman_PromotionPrompt(ChessGameCtx_t *ctx,
                                         ChessPiece_Data_t *pawn,
                                         const ChessMoveIteration_t *ai_move) {
@@ -76,7 +95,7 @@ void ChessGame_AIXHuman_PromotionPrompt(ChessGameCtx_t *ctx,
   }
   for (BOOL sel = FALSE, sprchange=TRUE; !sel; 
        sel=(0!=KEY_STROKE(A)), sprchange=TRUE) {
-    IRQ_Sync(1<<IRQ_KEYPAD);
+    IRQ_Sync(IRQ_FLAG(KEYPAD));
     if (KEY_STROKE(LEFT)) {
       --promotion_id;
       promotion_id&=PROMOTION_SEL_MASK;
@@ -105,13 +124,32 @@ ChessMoveIteration_t ChessGame_AIXHuman_GetMove(ChessGameCtx_t *ctx,
   Move_Validation_Flag_e move_result;
   if (NULL!=ai) {
     ChessAI_MoveSearch_Result_t result;
+    ChessAI_SpriteDataFromCtx(ctx);
     ChessAI_Move(ai, &result);
     move[0] = BOARD_IDX_CONVERT(result.start, NORMAL_IDX_TYPE);
-    UPDATE_PIECE_SPRITE_LOCATION(&sels[0], move[0]);
     move[1] = BOARD_IDX_CONVERT(result.dst, NORMAL_IDX_TYPE);
-    UPDATE_PIECE_SPRITE_LOCATION(&sels[1], move[1]);
+    ChessGame_RestoreSpritesToCtxLayout(ctx);
     move_result = ChessBoard_ValidateMove(ctx);
-    assert(move_result&MOVE_SUCCESSFUL);
+    ensure(move_result&MOVE_SUCCESSFUL,
+        "(move_result:=ChessBoard_ValidateMove(ctx) did not yield successful "
+        "move. Move attempted:\n"
+        "result::ChessAI_MoveSearch_Result_t = {\n\t"
+        ".start.raw = ( \x1b[0x44E4]%01hhu\x1b[0x1484], \x1b[0x44E4]%hhu"
+        "\x1b[0x1484] )\n\t.dst.raw = ( \x1b[0x44E4]%01hhu\x1b[0x1484], "
+        "\x1b[0x44E4]%hhu\x1b[0x1484] )\n\t.mv_flags = \x1b[0x44E4]0x%04hX"
+        "\x1b[0x1484]\n\t.promo = \x1b[0x44E4]%u\x1b[0x1484]\n\t"
+        ".score = \x1b[0x44E4]%d\x1b[0x1484]\n}\n"
+        "Piece tried to move according to ctx: \x1b[0x44E4]%s\x1b[0x1484]\n"
+        "Piece tried to move according to ai: \x1b[0x44E4]%s\n"
+        "\x1b[0x0000](For debugging):\x1b[0x1484]\n\tai_params->root_state = "
+        "\x1b[0x44E4]%p\x1b[0x1484]",
+        result.start.coord.x, result.start.coord.y, result.dst.coord.x,
+        result.dst.coord.y, result.mv_flags, result.promo, result.score,
+        DebugIO_ChessPiece_ToString(ctx->board_data[BOARD_IDX(result.start)]),
+        DebugIO_ChessPiece_ToString(BoardState_GetPiece_CompactIdx(
+                                                                ai->root_state,
+                                                                result.start)),
+        (void*)(ai->root_state));
     result.mv_flags|=MOVE_SUCCESSFUL;
     ensure(move_result==result.mv_flags,
         "move_result, set to value returned by ChessBoard_ValidateMove(ctx),\n"
@@ -122,8 +160,8 @@ ChessMoveIteration_t ChessGame_AIXHuman_GetMove(ChessGameCtx_t *ctx,
 
     ensure(result.mv_flags&MOVE_SUCCESSFUL,
         "result = {\n\t"
-        ".start.raw = 0x\x1b[0x44E4]%01hhX\x1b[0x2272]%01hhX\x1b[0x1484]\n\t"
-        ".dst.raw = \x1b[0x6756]0x\x1b[0x44E4]%01hhX\x1b[0x2272]%01hhX"
+        ".start.raw = 0x\x1b[0x44E4]%01hhX\x1b[0x44E4]%01hhX\x1b[0x1484]\n\t"
+        ".dst.raw = \x1b[0x6756]0x\x1b[0x44E4]%01hhX\x1b[0x44E4]%01hhX"
         "\x1b[0x1484]\n\t.mv_flags = \x1b[0x44E4]0x%04hX\x1b[0x1484]\n\t"
         ".promo = \x1b[0x44E4]%u\x1b[0x1484]\n\t.score = \x1b[0x44E4]%d"
         "\x1b[0x1484]\n}\n",
@@ -162,7 +200,7 @@ ChessMoveIteration_t ChessGame_AIXHuman_GetMove(ChessGameCtx_t *ctx,
          !sel; 
          OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS + i], &sels[i], 1),
          Vsync()) {
-      IRQ_Sync(1<<IRQ_KEYPAD);
+      IRQ_Sync(IRQ_FLAG(KEYPAD));
       if ((sel=KEY_STROKE(A))) {
         continue;
       } else if (KEY_STROKE(B)) {

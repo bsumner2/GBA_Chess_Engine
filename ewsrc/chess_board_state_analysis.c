@@ -4,7 +4,6 @@
 #include <GBAdev_types.h>
 #include <GBAdev_util_macros.h>
 #include "chess_board.h"
-#include "chess_board_state.h"
 #include "chess_board_state_analysis.h"
 struct s_board_state {
   ChessBoard_t board;
@@ -17,8 +16,12 @@ EWRAM_CODE BOOL BoardState_KingInCheck(const BoardState_t *board_state,
                                        u32 allied_king_id,
                                        u32 opp_ofs) {
   const PieceState_Graph_Vertex_t *vertices = board_state->graph.vertices;
-  for (u32 jbase=0; CHESS_TEAM_PIECE_COUNT>jbase; ++jbase) {
-    if (vertices[jbase|opp_ofs].edges.all&(1<<allied_king_id)) {
+  const ChessPiece_Roster_t roster = board_state->graph.roster;
+  for (u32 j,jbase=0; CHESS_TEAM_PIECE_COUNT>jbase; ++jbase) {
+    j=jbase|opp_ofs;
+    if (!CHESS_ROSTER_PIECE_ALIVE(roster, j))
+      continue;
+    if (vertices[j].edges.all&(1<<allied_king_id)) {
       return TRUE;
     }
   }

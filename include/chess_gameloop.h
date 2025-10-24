@@ -7,6 +7,7 @@
 #include <GBAdev_functions.h>
 #include "chess_ai.h"
 #include "chess_board.h"
+#include "key_status.h"
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
@@ -14,11 +15,17 @@ extern "C" {
 #define ChessGame_NotifyInvalidDest(mvmt) ChessGame_NotifyInvalidMove(mvmt, 1)
 #define ChessGame_NotifyInvalidStart(mvmt) ChessGame_NotifyInvalidMove(mvmt, 0)
 #define SEL_OAM_IDX_OFS (sizeof(ChessObj_Pieces_t)/sizeof(Obj_Attr_t))
+
 INLN void UPDATE_PIECE_SPRITE_LOCATION(Obj_Attr_t *spr_obj, 
                                        ChessBoard_Idx_t move);
+#define KSYNC_DISCRETE KeypadSync_OnKeysStroke
+#define KSYNC_CONTINUOUS KeyPadSync_OnKeysDown
+#define Ksync(key, k_disc_or_cont)\
+  k_disc_or_cont(KEY_##key)
 INLN void Vsync(void);
 
-
+INLN void KeypadSync_OnKeysStroke(u16 key_flags);
+INLN void KeyPadSync_OnKeysDown(u16 key_flags);
 void ChessBG_Init(void);
 
 IWRAM_CODE void ChessGameloop_ISR_Handler(void);
@@ -66,6 +73,19 @@ void UPDATE_PIECE_SPRITE_LOCATION(Obj_Attr_t *spr_obj, ChessBoard_Idx_t move) {
 void Vsync(void) {
   SUPERVISOR_CALL(0x05);
 }
+
+void KeypadSync_OnKeysStroke(u16 key_flags) {
+  do 
+    IRQ_Sync(IRQ_FLAG(KEYPAD)); 
+  while (!(key_flags&KEY_CURR) || (key_flags&KEY_PREV));
+}
+
+void KeyPadSync_OnKeysDown(u16 key_flags) {
+  do
+    IRQ_Sync(IRQ_FLAG(KEYPAD));
+  while (!(key_flags&KEY_CURR));
+}
+
 
 
 

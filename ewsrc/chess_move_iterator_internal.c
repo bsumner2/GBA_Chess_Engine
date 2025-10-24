@@ -2,9 +2,8 @@
 /** Free to use, but this copyright message must remain here */
 
 #include <GBAdev_functions.h>
+#include "chess_ai_types.h"
 #include "chess_board.h"
-#include "chess_board_state.h"
-#include "chess_move_iterator.h"
 
 
 #define PAWN_PROMOTION_TYPE_CT 4
@@ -42,36 +41,36 @@ KING_MVMT_CT=8,
 
 #define BISHOP_OR_ROOK_MVMT_COUNT 4
 
-static BOOL ChessMove_DiscreteMoveDirIterator_HasNext(
+static EWRAM_CODE BOOL ChessMove_DiscreteMoveDirIterator_HasNext(
                                               InternalMoveIterator_t *iterator);
 
-static BOOL ChessMove_ContinuousMoveDirIterator_HasNext(
+static EWRAM_CODE BOOL ChessMove_ContinuousMoveDirIterator_HasNext(
                                               InternalMoveIterator_t *iterator);
-static BOOL InternalMoveIterator_GetContinuous(ChessBoard_Idx_t *query_idx,
+static EWRAM_CODE BOOL InternalMoveIterator_GetContinuous(ChessBoard_Idx_t *query_idx,
                                                Mvmt_Dir_e dir);
-static BOOL ChessMove_KingMoveDirIterator_HasNext(
+static EWRAM_CODE BOOL ChessMove_KingMoveDirIterator_HasNext(
                                           InternalMoveIterator_t *iterator);
-static void InternalMoveIterator_ApplyPawnMove(
+static EWRAM_CODE void InternalMoveIterator_ApplyPawnMove(
                                             InternalMoveIterator_t *iterator,
                                             ChessMoveIteration_t *dest);
-static void InternalMoveIterator_ApplyKingMove(
+static EWRAM_CODE void InternalMoveIterator_ApplyKingMove(
                                             InternalMoveIterator_t *iterator,
                                             ChessMoveIteration_t *dest);
-static void InternalMoveIterator_ApplyKnightMove(
+static EWRAM_CODE void InternalMoveIterator_ApplyKnightMove(
                                               InternalMoveIterator_t *iterator,
                                               ChessMoveIteration_t *dest);
-static void InternalMoveIterator_ApplyContinuousMove(
+static EWRAM_CODE void InternalMoveIterator_ApplyContinuousMove(
                                               InternalMoveIterator_t *iterator,
                                               ChessMoveIteration_t *dest);
-static int InternalMoveIterator_GetDirectionCount(
+static EWRAM_CODE int InternalMoveIterator_GetDirectionCount(
                                         const InternalMoveIterator_t *iterator);
 
 
-void InternalMoveIterator_Uninit(InternalMoveIterator_t *iterator) {
+EWRAM_CODE void InternalMoveIterator_Uninit(InternalMoveIterator_t *iterator) {
   Fast_Memset32(iterator, 0, sizeof(InternalMoveIterator_t)/sizeof(WORD));
 }
 
-InternalMoveIterator_t *InternalMoveIterator_Init(
+EWRAM_CODE InternalMoveIterator_t *InternalMoveIterator_Init(
                                             InternalMoveIterator_t *iterator,
                                             ChessBoard_Idx_t start_loc,
                                             ChessPiece_e piece_type) {
@@ -229,7 +228,7 @@ InternalMoveIterator_t *InternalMoveIterator_Init(
           .cur_dir_idx = 0
         };
       }
-    __attribute__ (( __fallthrough__ ));
+    __INTENT__(FALLTHROUGH);
     case QUEEN_IDX:
       if (FILE_A < start_loc.coord.x) {
         dirs[2]=dirs[3]=dirs[4]=LEFT_FLAGBIT;
@@ -305,7 +304,7 @@ InternalMoveIterator_t *InternalMoveIterator_Init(
 
 
 
-BOOL InternalMoveIterator_GetContinuous(ChessBoard_Idx_t *query_in_out_idx,
+EWRAM_CODE BOOL InternalMoveIterator_GetContinuous(ChessBoard_Idx_t *query_in_out_idx,
                                         Mvmt_Dir_e dir) {
   ChessBoard_Idx_t mv = *query_in_out_idx;
   BOOL has_hor, has_ver;
@@ -347,7 +346,7 @@ BOOL InternalMoveIterator_GetContinuous(ChessBoard_Idx_t *query_in_out_idx,
 }
 
 
-BOOL ChessMove_ContinuousMoveDirIterator_HasNext(
+EWRAM_CODE BOOL ChessMove_ContinuousMoveDirIterator_HasNext(
                                             InternalMoveIterator_t *iterator) {
   ChessBoard_Idx_t dst = iterator->curmove;
   int dir_ct, iterator_cur_idx = iterator->gp_vals.cur_dir_idx;
@@ -385,7 +384,7 @@ BOOL ChessMove_ContinuousMoveDirIterator_HasNext(
   return FALSE;
 }
 
-BOOL InternalMoveIterator_IsContinuousMovementIterator(
+EWRAM_CODE BOOL InternalMoveIterator_IsContinuousMovementIterator(
                                       const InternalMoveIterator_t *iterator) {
   BOOL ret, valid = TRUE;
   switch ((PIECE_IDX_MASK&iterator->piece)) {
@@ -407,7 +406,7 @@ BOOL InternalMoveIterator_IsContinuousMovementIterator(
   return ret;
 }
 
-BOOL InternalMoveIterator_ContinuousForceNextDirection(
+EWRAM_CODE BOOL InternalMoveIterator_ContinuousForceNextDirection(
                                             InternalMoveIterator_t *iterator) {
   int idx;
   if (!InternalMoveIterator_IsContinuousMovementIterator(iterator))
@@ -421,7 +420,7 @@ BOOL InternalMoveIterator_ContinuousForceNextDirection(
   return TRUE;
 }
 
-BOOL ChessMove_KingMoveDirIterator_HasNext(
+EWRAM_CODE BOOL ChessMove_KingMoveDirIterator_HasNext(
                                           InternalMoveIterator_t *iterator) {
   const u32 CASTLE_FLAGS = iterator->gp_vals.king_vals.castle_moves_tried;
   int cur_dir_idx;
@@ -444,7 +443,7 @@ BOOL ChessMove_KingMoveDirIterator_HasNext(
 }
 
 
-BOOL ChessMove_DiscreteMoveDirIterator_HasNext(
+EWRAM_CODE BOOL ChessMove_DiscreteMoveDirIterator_HasNext(
                                             InternalMoveIterator_t *iterator) {
   Mvmt_Dir_e *dirs = iterator->directions;
   int dir_ct = 0, iterator_cur_idx = iterator->gp_vals.cur_dir_idx;
@@ -484,7 +483,7 @@ BOOL ChessMove_DiscreteMoveDirIterator_HasNext(
   return FALSE;
 }
 
-BOOL InternalMoveIterator_HasNext(InternalMoveIterator_t *iterator) {
+EWRAM_CODE BOOL InternalMoveIterator_HasNext(InternalMoveIterator_t *iterator) {
   BOOL valid_piece_type = TRUE;
   switch ((ChessPiece_e)(PIECE_IDX_MASK&iterator->piece)) {
   case PAWN_IDX:
@@ -507,7 +506,7 @@ BOOL InternalMoveIterator_HasNext(InternalMoveIterator_t *iterator) {
   return FALSE;
 }
 
-void InternalMoveIterator_ApplyPawnMove(InternalMoveIterator_t *iterator, 
+EWRAM_CODE void InternalMoveIterator_ApplyPawnMove(InternalMoveIterator_t *iterator, 
                                         ChessMoveIteration_t *dest) {
   ChessBoard_Idx_t dst = iterator->base;
   Mvmt_Dir_e dir;
@@ -521,7 +520,6 @@ void InternalMoveIterator_ApplyPawnMove(InternalMoveIterator_t *iterator,
     }
     int promo_type = iterator->gp_vals.pawn_vals.cur_promo_type;
     assert(PAWN_PROMOTION_TYPE_CT>=promo_type && 0<=promo_type);
-    BOOL promo;
     assert((VER_MASK&dir)==dir && 0!=(VER_MASK&dir));
     if (UP_FLAGBIT==dir) {
       dst.coord.y-=idx;
@@ -563,7 +561,7 @@ void InternalMoveIterator_ApplyPawnMove(InternalMoveIterator_t *iterator,
 
 
 
-void InternalMoveIterator_ApplyKingMove(InternalMoveIterator_t *iterator,
+EWRAM_CODE void InternalMoveIterator_ApplyKingMove(InternalMoveIterator_t *iterator,
                                         ChessMoveIteration_t *dest) {
   ChessBoard_Idx_t dst = iterator->base;
   int idx = iterator->gp_vals.cur_dir_idx;
@@ -625,7 +623,7 @@ void InternalMoveIterator_ApplyKingMove(InternalMoveIterator_t *iterator,
   iterator->gp_vals.cur_dir_idx = idx;
 }
 
-void InternalMoveIterator_ApplyKnightMove(InternalMoveIterator_t *iterator,
+EWRAM_CODE void InternalMoveIterator_ApplyKnightMove(InternalMoveIterator_t *iterator,
                                           ChessMoveIteration_t *dest) {
   ChessBoard_Idx_t dst = iterator->base;
   u32 dy, dx;
@@ -654,7 +652,7 @@ void InternalMoveIterator_ApplyKnightMove(InternalMoveIterator_t *iterator,
 }
 
 
-void InternalMoveIterator_ApplyContinuousMove(InternalMoveIterator_t *iterator,
+EWRAM_CODE void InternalMoveIterator_ApplyContinuousMove(InternalMoveIterator_t *iterator,
                                               ChessMoveIteration_t *dest) {
   ChessBoard_Idx_t dst = iterator->curmove;
   int idx = iterator->gp_vals.cur_dir_idx;
@@ -665,7 +663,7 @@ void InternalMoveIterator_ApplyContinuousMove(InternalMoveIterator_t *iterator,
   iterator->curmove = dest->dst = dst;
 }
 
-BOOL InternalMoveIterator_Next(InternalMoveIterator_t *iterator,
+EWRAM_CODE BOOL InternalMoveIterator_Next(InternalMoveIterator_t *iterator,
                             ChessMoveIteration_t *dest) {
   ChessPiece_e piece_type = PIECE_IDX_MASK&iterator->piece;
   BOOL valid_iterator = TRUE;
@@ -703,7 +701,7 @@ static_assert(PAWN_MVMT_CT==BISHOP_MVMT_CT && BISHOP_MVMT_CT==ROOK_MVMT_CT);
 static_assert(KING_MVMT_CT==QUEEN_MVMT_CT && QUEEN_MVMT_CT==KNIGHT_MVMT_CT);
 #define QUEEN_OR_KNIGHT_OR_KING_MVMT_COUNT 8
 
-int InternalMoveIterator_GetDirectionCount(
+EWRAM_CODE int InternalMoveIterator_GetDirectionCount(
                                       const InternalMoveIterator_t *iterator) {
   switch ((ChessPiece_e)(PIECE_IDX_MASK&iterator->piece)) {
   case PAWN_IDX:

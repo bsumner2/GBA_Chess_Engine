@@ -10,7 +10,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
-#define DEFAULT_MAX_DEPTH 5
+#define DEFAULT_MAX_DEPTH 2
 
 #ifndef MAX_DEPTH
 #define MAX_DEPTH DEFAULT_MAX_DEPTH
@@ -41,10 +41,7 @@ IWRAM_CODE void ChessAI_Params_Init(ChessAI_Params_t *obj,
 IWRAM_CODE void ChessAI_Move(ChessAI_Params_t *ai_params,
                              ChessAI_MoveSearch_Result_t *return_move);
 
-EWRAM_CODE BoardState_t *BoardState_Alloc(void);
-EWRAM_CODE void BoardState_Dealloc(BoardState_t *board_state);
-EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state, 
-                                            const ChessGameCtx_t *ctx);
+
 
 
 #ifdef __cplusplus

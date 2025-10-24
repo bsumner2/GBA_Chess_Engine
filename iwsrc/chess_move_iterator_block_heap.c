@@ -2,7 +2,10 @@
 #include <GBAdev_util_macros.h>
 #include "chess_move_iterator.h"
 #include "chess_move_iterator_block_allocator.h"
+#ifndef MAX_DEPTH
 #include "chess_ai.h"
+#endif
+
 typedef union u_move_iteration_bufferent {
   struct s_chess_move_iteration_bufferent_hdr {
     u32 size;
@@ -16,10 +19,10 @@ struct s_chess_move_iterator_private {
   ChessMoveIteration_t *moves;
 };
 
-#define NALLOC 32
+#define NALLOC 28
 
 #define MAX_MOVE_CANDIDATES 27
-#define MAX_ALLOCATABLE_BUFFERS (MAX_DEPTH*5 / 3)
+#define MAX_ALLOCATABLE_BUFFERS ((MAX_DEPTH>1)?(MAX_DEPTH*5 / 3):2)
 #define FULL_BUFFER_ENTRY_NMEMB (MAX_MOVE_CANDIDATES + 1)
 #define BUFFER_ENTRY_COUNT\
   (FULL_BUFFER_ENTRY_NMEMB*MAX_ALLOCATABLE_BUFFERS)
@@ -38,18 +41,20 @@ static MoveIteration_Buffer_Heap_Entry_t
 static MoveIteration_Buffer_Heap_Entry_t _L_base;
 static MoveIteration_Buffer_Heap_Entry_t *_L_freep = NULL;
 
-static MoveIteration_Buffer_Heap_Entry_t *MoreCore(size_t nalloc) {
+static IWRAM_CODE MoveIteration_Buffer_Heap_Entry_t *MoreCore(size_t nalloc) {
   if (nalloc < NALLOC)
     nalloc = NALLOC;
   MoveIteration_Buffer_Heap_Entry_t *next_break=&_L_unused_page_break[-NALLOC];
   if (next_break < _L_priv_move_buffers)
     return NULL;
-  next_break->header_block.size = nalloc; 
+  next_break->header_block.size = nalloc;
+  _L_unused_page_break = next_break;
+  
   MoveBufferHeap_Dealloc(&next_break[1].data_block);
   return _L_freep;
 }
 
-ChessMoveIterator_PrivateFields_t *MoveIterator_PrivateFields_Allocate(void) {
+IWRAM_CODE ChessMoveIterator_PrivateFields_t *MoveIterator_PrivateFields_Allocate(void) {
   for (int i = 0; MAX_ALLOCATABLE_BUFFERS > i; ++i) {
     if (_L_priv_data_ents_occupied[i])
       continue;
@@ -59,7 +64,7 @@ ChessMoveIterator_PrivateFields_t *MoveIterator_PrivateFields_Allocate(void) {
   return NULL;
 }
 
-BOOL MoveIterator_PrivateFields_Deallocate(
+IWRAM_CODE BOOL MoveIterator_PrivateFields_Deallocate(
                                       ChessMoveIterator_PrivateFields_t *obj) {
   if (((const uptr_t)obj<(uptr_t)_L_priv_data_ents) ||
       ((const uptr_t)&_L_priv_data_ents[MAX_ALLOCATABLE_BUFFERS-1]<(uptr_t)obj))
@@ -83,7 +88,7 @@ BOOL MoveIterator_PrivateFields_Deallocate(
 
 
 
-ChessMoveIteration_t *MoveBufferHeap_Alloc(size_t unit_count) {
+IWRAM_CODE ChessMoveIteration_t *MoveBufferHeap_Alloc(size_t unit_count) {
   MoveIteration_Buffer_Heap_Entry_t *p, *prevp;
   if (!unit_count)
     return NULL;
@@ -118,7 +123,7 @@ ChessMoveIteration_t *MoveBufferHeap_Alloc(size_t unit_count) {
 }
 
 
-void MoveBufferHeap_Dealloc(ChessMoveIteration_t *obj) {
+IWRAM_CODE void MoveBufferHeap_Dealloc(ChessMoveIteration_t *obj) {
   MoveIteration_Buffer_Heap_Entry_t *bp, *p;
   bp = &((MoveIteration_Buffer_Heap_Entry_t*)obj)[-1];
   for (p = _L_freep;

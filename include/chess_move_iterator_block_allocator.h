@@ -9,11 +9,11 @@
 extern "C" {
 #endif  /* C++ Name mangler guard */
 
-ChessMoveIterator_PrivateFields_t *MoveIterator_PrivateFields_Allocate(void);
-BOOL MoveIterator_PrivateFields_Deallocate(
+IWRAM_CODE ChessMoveIterator_PrivateFields_t *MoveIterator_PrivateFields_Allocate(void);
+IWRAM_CODE BOOL MoveIterator_PrivateFields_Deallocate(
                                       ChessMoveIterator_PrivateFields_t *obj);
-ChessMoveIteration_t *MoveBufferHeap_Alloc(size_t unit_count);
-void MoveBufferHeap_Dealloc(ChessMoveIteration_t *obj);
+IWRAM_CODE ChessMoveIteration_t *MoveBufferHeap_Alloc(size_t unit_count);
+IWRAM_CODE void MoveBufferHeap_Dealloc(ChessMoveIteration_t *obj);
 
 
 #ifdef __cplusplus

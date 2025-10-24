@@ -15,10 +15,11 @@
 #include <GBAdev_memmap.h>
 #include <GBAdev_util_macros.h>
 #include "chess_board.h"
-IWRAM_CODE void ChessGame_AnimateKnightMove(UNUSED ChessGameCtx_t *ctx,
-                                            ChessPiece_Data_t *moving,
-                                            UNUSED ChessBoard_Idx_t *mv,
-                                            Knight_Mvmt_Dir_e kdir) {
+IWRAM_CODE void ChessGame_AnimateKnightMove(
+                                      __INTENT__(UNUSED) ChessGameCtx_t *ctx,
+                                      ChessPiece_Data_t *moving,
+                                      __INTENT__(UNUSED) ChessBoard_Idx_t *mv,
+                                      Knight_Mvmt_Dir_e kdir) {
   static const float TALL_YPRIME_KOEFF=(32.F/200.F),
                      TALL_YPRIME_KONST=(3.2F*256.F);
   static const float WIDE_XPRIME_KOEFF=(5/16.F);

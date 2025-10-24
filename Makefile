@@ -15,6 +15,8 @@ TARGET=$(PROJ_NAME)
 ASM=./asm
 SRC=./src
 IWRAM_SRC=./iwsrc
+EWRAM_SRC=./ewsrc
+SRCS=$(SRC) $(IWRAM_SRC) $(EWRAM_SRC)
 BIN=./bin
 INC=./include
 LIB=./lib
@@ -32,15 +34,18 @@ GROM_CXX_OBJS=$(shell find $(SRC) -type f -iname '*.cpp' | sed 's-\./src-\./bin-
 IWRAM_C_OBJS=$(shell find $(IWRAM_SRC) -type f -iname '*.c' | sed 's-\./iwsrc-\./bin-g' | sed 's/\.c/\.o/g')
 GIWRAM_C_OBJS=$(shell find $(IWRAM_SRC) -type f -iname '*.c' | sed 's-\./iwsrc-\./bin-g' | sed 's/\.c/\.debug\.o/g')
 
+EWRAM_C_OBJS=$(shell find $(EWRAM_SRC) -type f -iname '*.c' | sed 's-\./ewsrc-\./bin-g' | sed 's/\.c/\.o/g')
+GEWRAM_C_OBJS=$(shell find $(EWRAM_SRC) -type f -iname '*.c' | sed 's-\./ewsrc-\./bin-g' | sed 's/\.c/\.debug\.o/g')
+
 IWRAM_CXX_OBJS=$(shell find $(IWRAM_SRC) -type f -iname '*.cpp' | sed 's-\./iwsrc-\./bin-g' | sed 's/\.cpp/\.o/g')
 GIWRAM_CXX_OBJS=$(shell find $(IWRAM_SRC) -type f -iname '*.cpp' | sed 's-\./iwsrc-\./bin-g' | sed 's/\.cpp/\.debug\.o/g')
 
 
-C_OBJS=$(ROM_C_OBJS) $(IWRAM_C_OBJS)
-GC_OBJS=$(GROM_C_OBJS) $(GIWRAM_C_OBJS)
+C_OBJS=$(ROM_C_OBJS) $(IWRAM_C_OBJS) $(EWRAM_C_OBJS)
+GC_OBJS=$(GROM_C_OBJS) $(GIWRAM_C_OBJS) $(GEWRAM_C_OBJS)
 
-CXX_OBJS=$(ROM_CXX_OBJS) $(IWRAM_CXX_OBJS)
-GCXX_OBJS=$(GROM_CXX_OBJS) $(GIWRAM_CXX_OBJS)
+CXX_OBJS=$(ROM_CXX_OBJS) $(IWRAM_CXX_OBJS) $(EWRAM_CXX_OBJS)
+GCXX_OBJS=$(GROM_CXX_OBJS) $(GIWRAM_CXX_OBJS) $(GEWRAM_CXX_OBJS)
 
 S_OBJS=$(shell find $(ASM) -type f -iname '*.s' | sed 's-\./asm-\./bin-g' | sed 's/\.s/\.o/g')
 GS_OBJS=$(shell find $(ASM) -type f -iname '*.s' | sed 's-\./asm-\./bin-g' | sed 's/\.s/\.debug\.o/g')
@@ -69,6 +74,9 @@ ROM_CFLAGS=$(CFLAGS_BASE) $(ARCH)
 
 GIWRAM_CFLAGS=$(GCFLAGS_BASE) $(IARCH) -mlong-calls
 IWRAM_CFLAGS=$(CFLAGS_BASE) $(IARCH) -mlong-calls
+
+GEWRAM_CFLAGS=$(GCFLAGS_BASE) $(ARCH) -mlong-calls
+EWRAM_CFLAGS=$(GCFLAGS_BASE) $(ARCH) -mlong-calls
 
 LDFLAGS=$(ARCH) $(SPECS) -L$(LIB) -l$(LIBGBADEV)
 GLDFLAGS=-g $(ARCH) $(SPECS) -L$(LIB) -l$(LIBGBADEV)
@@ -100,11 +108,11 @@ debug: clean gbuild
 	$(MGBA) -g $(BIN)/$(TARGET).debug.elf &
 	$(DB) $(DBFLAGS)
 
-gbuild: $(IWRAM_SRC) $(SRC) $(BIN) $(TARGET).debug.elf
+gbuild: $(SRCS) $(BIN) $(TARGET).debug.elf
 
-build: $(IWRAM_SRC) $(SRC) $(BIN) $(TARGET).gba
+build: $(SRCS) $(BIN) $(TARGET).gba
 
-$(IWRAM_SRC) $(SRC) $(ASM) $(BIN):
+$(IWRAM_SRC) $(EWRAM_SRC) $(SRC) $(ASM) $(BIN):
 	mkdir -p $@
 
 $(TARGET).debug.elf: $(GC_OBJS) $(GCXX_OBJS) $(GS_OBJS)
@@ -147,6 +155,19 @@ $(GIWRAM_CXX_OBJS): $(BIN)/%.debug.o : $(IWRAM_SRC)/%.cpp
 
 $(IWRAM_CXX_OBJS): $(BIN)/%.o : $(IWRAM_SRC)/%.cpp
 	$(CXX) $(CXXSTD) -c $< $(IWRAM_CFLAGS) -o $@
+
+
+$(GEWRAM_C_OBJS): $(BIN)/%.debug.o : $(EWRAM_SRC)/%.c
+	$(CC) $(CSTD) -c $< $(GEWRAM_CFLAGS) -o $@
+
+$(EWRAM_C_OBJS): $(BIN)/%.o : $(EWRAM_SRC)/%.c
+	$(CC) $(CSTD) -c $< $(EWRAM_CFLAGS) -o $@
+
+$(GEWRAM_CXX_OBJS): $(BIN)/%.debug.o : $(EWRAM_SRC)/%.cpp
+	$(CXX) $(CXXSTD) -c $< $(GEWRAM_CFLAGS) -o $@
+
+$(EWRAM_CXX_OBJS): $(BIN)/%.o : $(EWRAM_SRC)/%.cpp
+	$(CXX) $(CXXSTD) -c $< $(EWRAM_CFLAGS) -o $@
 
 #-------------------------------Build----------------------------------------------------------------------
 clean: 
