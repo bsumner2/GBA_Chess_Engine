@@ -65,7 +65,9 @@ static const size_t MODE_SEL_PROMPT_LENS[4] = {
 #define SELECT_CLR 0x4167
 #define NORMAL_CLR 0x1484
 
-static void M3_SelScreen(int sel, int prev) {
+static int M3FE_SelGamemode(void);
+static void M3_SelScreen(int sel, int prev);
+void M3_SelScreen(int sel, int prev) {
   assert((SEL_MASK&sel)==sel);
   if (0 > prev) {
     for (int i = 0; SEL_COUNT > i; ++i) {
@@ -99,6 +101,44 @@ static void M3_SelScreen(int sel, int prev) {
                MODE_SEL_PROMPTS[prev]);
 }
 
+int M3FE_SelGamemode(void) {
+  int prev=0, cur=0;
+  REG_DPY_CNT = REG_FLAG(DPY_CNT, BG2)|REG_VALUE(DPY_CNT, MODE, 3);
+  M3_SelScreen(0, -1);
+  for (IRQ_Sync(IRQ_FLAG(KEYPAD)); !KEY_STROKE(A); IRQ_Sync(IRQ_FLAG(KEYPAD))) {
+    if (KEY_STROKE(UP)) {
+      --cur;
+    } else if (KEY_STROKE(DOWN)) {
+      ++cur;
+    } else {
+      continue;
+    }
+    cur&=SEL_MASK;
+    M3_SelScreen(cur, prev);
+    prev = cur;
+  }
+
+  Fast_Memset32(VRAM_M3,
+                0,
+                sizeof(u16)*M3_SCREEN_HEIGHT*M3_SCREEN_WIDTH/sizeof(WORD));
+
+  switch ((GameModeSelection_e)cur) {
+    case GAME_MODE_2PLAYER:
+      return 0;
+      break;
+    case GAME_MODE_1PLAYER_V_CPU:
+    case GAME_MODE_CPU_V_1PLAYER:
+      return PIECE_TEAM_MASK^(cur<<12);
+      break;
+    case GAME_MODE_CPU_V_CPU:
+      assert(CPU_X_CPU_IMPLEMENTED);
+      return PIECE_TEAM_MASK;
+      break;
+    default:
+      assert(SEL_MASK&cur);
+  }
+
+}
 
 int main(void) {
 #ifdef TEST_KNIGHT_MVMT
@@ -159,39 +199,8 @@ int main(void) {
     REG_ISR_MAIN = ChessGameloop_ISR_Handler;
     REG_IE |= IRQ_FLAGS(VBLANK, KEYPAD);
     REG_IME = 1;
-    M3_SelScreen(0, -1);
-    for (int prev=0, cur=0; IRQ_Sync(IRQ_FLAG(KEYPAD)), 1; Vsync()) {
-      IRQ_Sync(IRQ_FLAG(KEYPAD));
-      if (KEY_STROKE(A)) {
-        switch ((GameModeSelection_e)cur) {
-          case GAME_MODE_2PLAYER:
-            cpu_team_side = 0;
-            break;
-          case GAME_MODE_1PLAYER_V_CPU:
-          case GAME_MODE_CPU_V_1PLAYER:
-            cpu_team_side = PIECE_TEAM_MASK^(cur<<12);
-            break;
-          case GAME_MODE_CPU_V_CPU:
-            cpu_team_side=PIECE_TEAM_MASK;
-            assert(CPU_X_CPU_IMPLEMENTED);
-            break;
-        }
-        break;
-      }
-      if (KEY_STROKE(UP)) {
-        --cur;
-      } else if (KEY_STROKE(DOWN)) {
-        ++cur;
-      } else {
-        continue;
-      }
-      cur&=SEL_MASK;
-      M3_SelScreen(cur, prev);
-      prev = cur;
-    }
-    Fast_Memset32(VRAM_M3,
-                  0,
-                  sizeof(u16)*M3_SCREEN_HEIGHT*M3_SCREEN_WIDTH/sizeof(WORD));
+
+    cpu_team_side = M3FE_SelGamemode();
 
     REG_BLEND_CNT = REG_FLAG(BLEND_CNT, LAYER_B_BG0)
                       | REG_VALUE(BLEND_CNT, BLEND_MODE, BLEND_MODE_ALPHA);
