@@ -30,8 +30,6 @@ extern "C" {
 #define CONVERT_BOARD_STATE_MOVE_FLAG(side_to_move) ((side_to_move)<<8)
 #define IS_MAXIMIZING(side_to_move) (side_to_move & WHITE_TO_MOVE_FLAGBIT)
 
-
-
 #define CASTLE_RIGHTS_WHITE_FLAGS_SHAMT 0
 #define CASTLE_RIGHTS_BLACK_FLAGS_SHAMT 2
 typedef enum e_castle_rights_flag {
@@ -46,6 +44,9 @@ typedef enum e_castle_rights_flag {
   ALL_CASTLE_RIGHTS_MASK=15
 } PACKED CastleRightsFlag_e;
 #define CASTLE_RIGHTS_SHAMT_INVARIANT 3
+
+#define NON_FORFEITED_CASTLE_RIGHTS(board_state)\
+  (u16)(~((board_state)->state.castle_rights_forfeiture)&ALL_CASTLE_RIGHTS_MASK)
 
 typedef struct s_board_state BoardState_t;
 #define INVALID_IDX_COMPACT_RAW 0xFF
@@ -64,6 +65,7 @@ typedef struct s_game_state {
   u8 castle_rights;
   u8 ep_file;
   u8 halfmove_clock;
+  u8 castle_rights_forfeiture;
 } ALIGN(4) GameState_t;
 
 typedef union u_piece_adj_bitfield {

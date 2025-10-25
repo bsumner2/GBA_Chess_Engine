@@ -19,7 +19,8 @@
 #else
 #define Debug_Ksync(unused1, unused2)
 #endif
-IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state, Move_Validation_Flag_e last_move);
+IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
+                               Move_Validation_Flag_e last_move);
 
 struct s_board_state {
   ChessBoard_t board;
@@ -178,15 +179,23 @@ IWRAM_CODE void ChessAI_SpriteDataFromCtx(const ChessGameCtx_t *ctx) {
                    *cur_obj_addr;
   Obj_Attr_t *const LOCAL_ORIGIN = &_L_move_sprites.pieces[0][0],
              **cur_obj_addr_slot;
-  Fast_Memcpy32(&_L_move_sprites, CTX_OBJ_ORIGIN, sizeof(ChessObj_Set_t)/sizeof(WORD));
-  Fast_Memcpy32(&_L_captured_sprite_tracker.ctx_compat, &ctx->tracker, sizeof(ChessAI_PieceTracker_t)/sizeof(WORD));
+  Fast_Memcpy32(&_L_move_sprites, 
+                CTX_OBJ_ORIGIN,
+                sizeof(ChessObj_Set_t)/sizeof(WORD));
+  Fast_Memcpy32(&_L_captured_sprite_tracker.ctx_compat,
+                &ctx->tracker,
+                sizeof(ChessAI_PieceTracker_t)/sizeof(WORD));
 //  _L_captured_sprite_tracker.ctx_compat = ctx->tracker;
   _L_captured_sprite_tracker.data.dummy = NULL;  // just to be safe.
   for (u32 j,i = 0; 2>i; ++i) {
     const u32 CAPCOUNT = ctx->tracker.capcount[i];
     for (j = 0; CAPCOUNT>j; ++j) {
-      cur_obj_addr = *(cur_obj_addr_slot = &_L_captured_sprite_tracker.data.pieces_captured[i][j]);
-      *cur_obj_addr_slot = &LOCAL_ORIGIN[((uptr_t)cur_obj_addr - (uptr_t)CTX_OBJ_ORIGIN)/sizeof(Obj_Attr_t)];
+      cur_obj_addr = 
+        *(cur_obj_addr_slot = 
+            &_L_captured_sprite_tracker.data.pieces_captured[i][j]);
+      *cur_obj_addr_slot =
+        (&LOCAL_ORIGIN[((uptr_t)cur_obj_addr 
+                        - (uptr_t)CTX_OBJ_ORIGIN)/sizeof(Obj_Attr_t)]);
     }
   }
   _L_move_sprites.sels[0].attr0.regular.disable = FALSE;
@@ -243,9 +252,10 @@ IWRAM_CODE void ChessAI_Move(ChessAI_Params_t *ai_params,
   ++ai_params->gen;
 }
 
-IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(ChessAI_Params_t *params,
-                                             i16 alpha,
-                                             i16 beta) {
+IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(
+                                                      ChessAI_Params_t *params,
+                                                      i16 alpha,
+                                                      i16 beta) {
   {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wuninitialized"
@@ -297,8 +307,10 @@ IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(ChessAI_Params_t *params
                 = PREMOVE_ROOT_STATE->state.side_to_move&WHITE_TO_MOVE_FLAGBIT
                               ?PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT
                               :0,
-            ALLIED_KING = TEAM_PIECE_IDXS_OFS|KING,
-            OPP_IDX_OFS = PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT^TEAM_PIECE_IDXS_OFS;
+            ALLIED_KING = 
+              TEAM_PIECE_IDXS_OFS|KING,
+            OPP_IDX_OFS = 
+              PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT^TEAM_PIECE_IDXS_OFS;
   Move_Validation_Flag_e last_move = params->last_move;
   i16 best_move = IS_MAXIMIZING(PREMOVE_ROOT_STATE->state.side_to_move)
                         ? INT16_MIN
@@ -324,7 +336,8 @@ IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(ChessAI_Params_t *params
     while (ChessMoveIterator_HasNext(&movegen)) {
       // copy immutable initial root state to the local mutable root state, 
       // so that it's ready to have the move applied to it.
-      UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(0, BOARD_IDX_CONVERT(src, NORMAL_IDX_TYPE));
+      UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(0, 
+                                       BOARD_IDX_CONVERT(src, NORMAL_IDX_TYPE));
       Fast_Memcpy32(&move_applied_state,
                     PREMOVE_ROOT_STATE,
                     sizeof(BoardState_t)/sizeof(WORD));
@@ -450,7 +463,7 @@ IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
 
   const ChessPiece_Roster_t ROSTER_STATE = state->graph.roster;
   const ChessPiece_e (*board)[CHESS_BOARD_ROW_COUNT] = state->board;
-  const u16 STATE_CASTLE_FLAGS=state->state.castle_rights;
+  const u16 NONFORFEITED_CASTLE_FLAGS = NON_FORFEITED_CASTLE_RIGHTS(state);
   i16 score=0, base, tactical;
   ChessPiece_e piece;
   BOOL is_white;
@@ -471,23 +484,25 @@ IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
   for (u16 flag=1; flag&ALL_CASTLE_RIGHTS_MASK; flag<<=1) {
     /* Truth table:
      *  curflag HIGH | white flag | positive score change
-     *       0       |   0        |    1        // black lost castle right (+)
-     *       0       |   1        |    0        // white lost castle right (-)
-     *       1       |   0        |    0        // black has castle right  (-)
-     *       1       |   1        |    1        // white has castle right  (+)
+     *       0       |   0        |    1        // black forfeited right  (+)
+     *       0       |   1        |    0        // white forfeited right  (-)
+     *       1       |   0        |    0        // black has or used right (-)
+     *       1       |   1        |    1        // white has or used right (+)
      * Truth table shows that positive score change can be represented by
      * <curflag is HIGH in state->castle_rights> XNOR <curflag is white>
      * AKA
-     * (!((0!=(STATE_CASTLE_FLAGS&flag)) ^ (0!=(WHITE_CASTLE_RIGHTS_MASK))))
+     * (!((0!=(NONFORFEITED_CASTLE_FLAGS&flag))
+     *          ^(0!=(WHITE_CASTLE_RIGHTS_MASK))))
      * So if we do:
-     * ((0!=(STATE_CASTLE_FLAGS&flag)) ^ (0!=(WHITE_CASTLE_MASK&flag)))
+     * ((0!=(NONFORFEITED_CASTLE_FLAGS&flag)) ^ (0!=(WHITE_CASTLE_MASK&flag)))
      * which is <has said castle right> XOR <flag is a white castle right>
      * we get inverse of positive score change (so negative score change):
     */
-    if ((0!=(STATE_CASTLE_FLAGS&flag))^(0!=(WHITE_CASTLE_RIGHTS_MASK&flag)))
-      score -= 25;
+    if ((0!=(NONFORFEITED_CASTLE_FLAGS&flag))
+              ^(0!=(WHITE_CASTLE_RIGHTS_MASK&flag)))
+      score -= 100;
     else
-      score += 25;
+      score += 100;
   }
   if (last_move&MOVE_CASTLE_MOVE_FLAGS_MASK) {
     score+=(WHITE_TO_MOVE_FLAGBIT==state->state.side_to_move) ? 50 : -50;

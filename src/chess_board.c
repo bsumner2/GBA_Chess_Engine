@@ -162,6 +162,7 @@ void ChessObj_Init_Sel_Pieces(ChessObj_Mvmt_Sel_t sel_objs) {
       }
     }).raw;
     sel_objs[i].attr2.priority = 1;
+    sel_objs[i].attr2.sprite_idx = 2*TILES_PER_CSPR*EMPTY_IDX;
   }
   
 }

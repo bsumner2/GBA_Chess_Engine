@@ -24,7 +24,9 @@ typedef enum e_move_validation_flags {
 
   MOVE_SUCCESSFUL=TRUE,
   MOVE_UNSUCCESSFUL=FALSE,
-} Move_Validation_Flag_e;
+} PACKED Move_Validation_Flag_e;
+
+static_assert(sizeof(Move_Validation_Flag_e)==2);
 
 typedef enum e_piece {
   WHITE_FLAGBIT = 0x1000,
@@ -50,8 +52,8 @@ typedef enum e_piece {
   WHITE_KNIGHT=0x1003,
   WHITE_QUEEN=0x1004,
   WHITE_KING=0x1005,
-} ALIGN(2) ChessPiece_e;
-
+} PACKED ChessPiece_e;
+static_assert(sizeof(ChessPiece_e)==2);
 
 extern const ChessPiece_e BOARD_BACK_ROWS_INIT[16];
 

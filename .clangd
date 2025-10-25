@@ -1,6 +1,6 @@
 ---
 CompileFlags:
-  Add: [ -xc, -std=c23, -Wall, -Wextra, -Wno-empty-translation-unit, 
+  Add: [ -xc, -std=c23, -O2, -Wall, -Wextra, -Wno-empty-translation-unit, 
     -Wno-unknown-attributes, -pedantic, -I../include, 
     -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include,
     -D_DEBUG_BUILD_
@@ -11,7 +11,7 @@ If:
   PathMatch: [.*\.hpp, .*\.cpp, .*\.cc ]
 
 CompileFlags:
-  Add: [ -xc++, -std=c++23, -Wall, -Wextra, -Wno-empty-translation-unit, 
+  Add: [ -xc++, -std=c++23, -O2, -Wall, -Wextra, -Wno-empty-translation-unit, 
         -Wno-unknown-attributes, -pedantic, -I../include, 
         -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include,
         -D_DEBUG_BUILD_

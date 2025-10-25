@@ -124,7 +124,7 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
   GameState_t *state = &board_state->state;
   const PGN_Round_LL_t *move_hist = &ctx->move_hist;
   const PGN_Round_t *round;
-  u8 castle_rights;
+  u8 castle_rights, castle_forfeitures;
   u8 whose_move;
   static_assert(0==(sizeof(ChessBoard_t)%sizeof(WORD)));
   Fast_Memcpy32(board_state->board,
@@ -163,8 +163,10 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
     state->castle_rights = castle_rights = ALL_CASTLE_RIGHTS_MASK;
   } else {
     /* Active low for now, makes deactivating during forfeiture check easier */
+    ChessPiece_e curpiece;
+    u8 curflag = 0;
     castle_rights = 0;
- 
+    castle_forfeitures = 0;
     for (const PGN_Round_LL_Node_t *const END 
                                     = WHITE_TO_MOVE_FLAGBIT&whose_move
                                           ? NULL
@@ -176,55 +178,81 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
  
       for (int i = 0, shamt; 2 > i; ++i) {
         shamt = i<<1;
+        if (round->moves[i].move_outcome&MOVE_CASTLE_MOVE_FLAGS_MASK) {
+          assert(KING==round->moves[i].roster_id);
+          // When move was a castle mv, only castle rights affected, 
+          // not forfeiture.
+          castle_rights |= 
+            (QUEENSIDE_SHAMT_INVARIANT|KINGSIDE_SHAMT_INVARIANT)<<shamt;
+          continue;
+        }
         switch ((ChessPiece_Roster_Id_e)round->moves[i].roster_id) {
         case ROOK0:
-          castle_rights|=QUEENSIDE_SHAMT_INVARIANT<<shamt;
+          curflag = QUEENSIDE_SHAMT_INVARIANT<<shamt;
           break;
         case KING:
-          castle_rights|=(QUEENSIDE_SHAMT_INVARIANT
-                          |KINGSIDE_SHAMT_INVARIANT)<<shamt;
+          curflag = (QUEENSIDE_SHAMT_INVARIANT|KINGSIDE_SHAMT_INVARIANT)<<shamt;
           break;
         case ROOK1:
-          castle_rights|=KINGSIDE_SHAMT_INVARIANT<<shamt;
+          curflag = KINGSIDE_SHAMT_INVARIANT<<shamt;
           break;
         default:
           continue;
         }
+      if (0==(castle_rights&curflag)) {
+        // active LOW so if curflag&rights is 0, then this mustve been a 
+        // forfeiture event.
+        castle_forfeitures |= curflag&(curflag^castle_rights);
+      }
+        castle_rights|=curflag;
       }
     }
     if (BLACK_TO_MOVE_FLAGBIT&whose_move) {
       round = &move_hist->tail->data;
-      switch ((ChessPiece_Roster_Id_e)round->moves[0].roster_id) {
+      if (round->moves[0].move_outcome&MOVE_CASTLE_MOVE_FLAGS_MASK) {
+        assert(KING==round->moves[0].roster_id);
+        castle_rights |= 
+          (QUEENSIDE_SHAMT_INVARIANT
+           | KINGSIDE_SHAMT_INVARIANT)<<CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
+      } else {
+        switch ((ChessPiece_Roster_Id_e)round->moves[0].roster_id) {
         case ROOK0:
-          castle_rights
-            |=QUEENSIDE_SHAMT_INVARIANT<<CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
+          curflag =QUEENSIDE_SHAMT_INVARIANT<<CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
           break;
         case ROOK1:
-          castle_rights
-            |=KINGSIDE_SHAMT_INVARIANT<<CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
+          curflag = KINGSIDE_SHAMT_INVARIANT<<CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
           break;
         case KING:
-          castle_rights
-            |=(KINGSIDE_SHAMT_INVARIANT
-                |QUEENSIDE_SHAMT_INVARIANT)
-                              <<CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
+          curflag=(KINGSIDE_SHAMT_INVARIANT
+                   |QUEENSIDE_SHAMT_INVARIANT)<<CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
           break;
         default:
+          curflag = 0;
           break;
+        }
       }
+      if (0==(castle_rights&curflag)) {
+        // active LOW so if curflag&rights is 0, then this mustve been a 
+        // forfeiture event.
+        castle_forfeitures |= curflag&(curflag^castle_rights);
+      }
+      castle_rights |= curflag;
     }
     for (u32 roster_id, i = 0; CASTLE_FLAG_COUNT>i; ++i) {
-      if ((1U<<i)&castle_rights) {
+      curflag = (1U<<i);
+      if (curflag&castle_rights) {
         // remember its still active low, so if condition yields true,
         // that means that flag's corresponding castle rights have already
         // been forfeit, so continue.
         continue;
+      } else {
+        assert(!(curflag&castle_forfeitures));
       }
       roster_id = CASTLE_FLAGS_CORRESPONDING_ROOK_RIDS[i];
       if (CHESS_ROSTER_PIECE_ALIVE(ctx->tracker.roster, roster_id))
         continue;
-      castle_rights|=(1U<<i);
-
+      castle_rights|=curflag;
+      castle_forfeitures|=curflag;
     }
 
     /* Now it's active high. Set castle_rights^=ZOBRIST_CASTLE_ID_MASK to clear
@@ -415,17 +443,18 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
       rook_idx = ROOK1;
       castle_rights_flagbit = KINGSIDE_SHAMT_INVARIANT;
     }
-    assert(0!=(board_state->state.castle_rights&castle_rights_flagbit));
     if (moving_idx&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT) {
-      board_state->state.castle_rights ^=(WK|WQ);
+      castle_rights_flagbit <<= CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
+      assert(0!=(board_state->state.castle_rights&castle_rights_flagbit));
+      board_state->state.castle_rights &=~(WK|WQ);
       rook_idx |= PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT;
       rook_start.coord.y = rook_end.coord.y = ROW_1;
-      castle_rights_flagbit <<= CASTLE_RIGHTS_WHITE_FLAGS_SHAMT;
       rook_piece |= WHITE_FLAGBIT;
     } else {
-      board_state->state.castle_rights ^= (BK|BQ);
-      rook_start.coord.y = rook_end.coord.y = ROW_8;
       castle_rights_flagbit <<= CASTLE_RIGHTS_BLACK_FLAGS_SHAMT;
+      assert(0!=(board_state->state.castle_rights&castle_rights_flagbit));
+      board_state->state.castle_rights &=~(BK|BQ);
+      rook_start.coord.y = rook_end.coord.y = ROW_8;
       rook_piece |= BLACK_FLAGBIT;
     }
     rook_vertex = &board_state->graph.vertices[rook_idx];
@@ -470,6 +499,7 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
                             ? CASTLE_RIGHTS_WHITE_FLAGS_SHAMT
                             : CASTLE_RIGHTS_BLACK_FLAGS_SHAMT,
         team_invariant_mvidx = moving_idx&PIECE_ROSTER_ID_MASK;
+    u8 flags;
     // If all castle rights already forfeit, no point in doing this
     if (0==(board_state->state.castle_rights
           &(CASTLE_RIGHTS_SHAMT_INVARIANT<<shamt)))
@@ -483,14 +513,16 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
     else
       assert(ROOK0==team_invariant_mvidx || ROOK1==team_invariant_mvidx);
     if (ROOK0==team_invariant_mvidx) {
-      board_state->state.castle_rights&=~(QUEENSIDE_SHAMT_INVARIANT<<shamt);
+      flags = (QUEENSIDE_SHAMT_INVARIANT<<shamt);
     } else if (ROOK1==team_invariant_mvidx) {
-      board_state->state.castle_rights&=~(KINGSIDE_SHAMT_INVARIANT<<shamt);
+      flags = (KINGSIDE_SHAMT_INVARIANT<<shamt);
     } else {
       assert(KING==team_invariant_mvidx);
-      board_state->state.castle_rights
-        &=~((KINGSIDE_SHAMT_INVARIANT|QUEENSIDE_SHAMT_INVARIANT)<<shamt);
+      flags = ((KINGSIDE_SHAMT_INVARIANT|QUEENSIDE_SHAMT_INVARIANT)<<shamt);
     }
+    board_state->state.castle_rights_forfeiture 
+      |= board_state->state.castle_rights&flags;
+    board_state->state.castle_rights&=~flags;
   } while (0);
   if (MOVE_PAWN_TWO_SQUARE&flags) {
     const ChessBoard_File_e EP_CANDIDATE_FILE = move[1].coord.x;
