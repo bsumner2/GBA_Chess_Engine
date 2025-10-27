@@ -364,7 +364,9 @@ BOOL ChessGame_CheckEscapable(const ChessGameCtx_t *ctx,
     if (!ChessBoard_ValidateKingMoveEvadesCheck(&ctx_copy, checking_pcs,
         checking_pcs_ct, hypothetical_mv_flag))
       continue;
-    if (!ChessBoard_KingMove_EntersCheck(ctx_copy.board_data, ctx_copy.move_selections, &ctx_copy.tracker))
+    if (!ChessBoard_KingMove_EntersCheck(ctx_copy.board_data, 
+                                         ctx_copy.move_selections,
+                                         &ctx_copy.tracker))
       return TRUE;
   }
   return FALSE;

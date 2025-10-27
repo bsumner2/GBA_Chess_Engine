@@ -336,7 +336,8 @@ EWRAM_CODE BoardState_t *Graph_FromCtx(BoardState_t *board_state,
          hasnext;
          hasnext = ChessMoveIterator_Next(&iterator, &mv)) {
 //      assert(ChessMoveIterator_Next(&iterator, &mv));
-      assert(EMPTY_IDX!=board_data[BOARD_IDX(mv.dst)]);
+      assert((EMPTY_IDX!=board_data[BOARD_IDX(mv.dst)])
+              ^ (0!=(mv.special_flags&MOVE_EN_PASSENT)));
       hit_piece_query_obj.location = mv.dst;
       ctx_vert = Graph_Get_Vertex(ctx_graph, &hit_piece_query_obj);
       assert(NULL!=ctx_vert);
@@ -650,7 +651,7 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
     white_cardinality = __builtin_popcount(cur_adjbits.team_invariant.white);
     black_cardinality = __builtin_popcount(cur_adjbits.team_invariant.black);
     total = white_cardinality+black_cardinality;
-    vertices[i].total_edge_count = total; 
+    vertices[i].total_edge_count = total;
     vertices[i].edges = cur_adjbits;
     if (i&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT) {
       vertices[i].attacking_count = black_cardinality;

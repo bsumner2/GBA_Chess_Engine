@@ -23,6 +23,11 @@ typedef struct s_chess_move_iterator {
   (0!=(mode&MV_ITER_MOVESET_ORDERED_FLAGBIT))
 #define MV_ITER_MOVESET_UNORDERED(mode)\
   (0==(mode&MV_ITER_MOVESET_ORDERED_FLAGBIT))
+#define MV_ITER_MOVESET_SETTING_ENABLED(mode, setting)\
+  (0!=(mode&MV_ITER_MOVESET_##setting##_FLAGBIT))
+#define MV_ITER_MOVESET_SETTING_DISABLED(mode, setting)\
+  (0==(mode&MV_ITER_MOVESET_##setting##_FLAGBIT))
+
 
 typedef enum e_chess_move_iterator_moveset_mode {
   MV_ITER_MOVESET_ALL_MINUS_ALLIED_COLLISIONS=0,

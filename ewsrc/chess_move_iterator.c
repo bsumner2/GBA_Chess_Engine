@@ -176,14 +176,14 @@ EWRAM_CODE int __MoveIterationCmp(const void *a, const void *b) {
 
   lhs_empty = (EMPTY_IDX==lhs_dst_piece);
   if (lhs_empty^(EMPTY_IDX==rhs_dst_piece)) {  // 1 operand empty, other not
-    return lhs_empty ? 1 : -1;  // and if lhs is the empty 1,
-                                                 // positive cmp return. This
-                                                 // is done because we want
-                                                 // better moves at leftmost 
-                                                 // side (lowermost addr),
-                                                 // as iterator iterates 
-                                                 // to right (increment addr)
-                                                 // as we go thru move buf
+    return lhs_empty ? 1 : -1;                 // and if lhs is the empty 1,
+                                               // positive cmp return. This
+                                               // is done because we want
+                                               // better moves at leftmost 
+                                               // side (lowermost addr),
+                                               // as iterator iterates 
+                                               // to right (increment addr)
+                                               // as we go thru move buf
   }
   if (lhs_empty) {
     // if both spots equal, just evaluate based on distance for cmp, OR
@@ -201,9 +201,9 @@ EWRAM_CODE int __MoveIterationCmp(const void *a, const void *b) {
         }
       }
       if (MOVE_SPECIAL_MOVE_FLAGS_MASK&lhs->special_flags) {
-        return MOVE_SPECIAL_MOVE_FLAGS_MASK&rhs->special_flags ? 1 : 0;
+        return MOVE_SPECIAL_MOVE_FLAGS_MASK&rhs->special_flags ? 0 : -1;
       } else if (MOVE_SPECIAL_MOVE_FLAGS_MASK&rhs->special_flags) {
-        return -1;
+        return 1;
       }
     }
     
@@ -244,7 +244,7 @@ EWRAM_CODE BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
 
   ChessPiece_e mv_piece = BOARD_DATA[BOARD_IDX(piece_location)], curpiece;
   u32 count = 0;
-  BOOL ordered = MV_ITER_MOVESET_ORDERED(mode);
+  BOOL ordered = MV_ITER_MOVESET_SETTING_ENABLED(mode, ORDERED);
   mode = MV_ITER_MOVESET_SET_TYPE(mode);
   Fast_Memset32(&iter, 0, sizeof(InternalMoveIterator_t)/sizeof(WORD));
   *dst_iterator = iterator;
@@ -351,7 +351,9 @@ EWRAM_CODE BOOL ChessMoveIterator_Alloc(ChessMoveIterator_t *dst_iterator,
         check_against.arithmetic.x += dx;
         for (i32 file = check_against.arithmetic.x; FILE_E!=file;
              check_against.arithmetic.x = (file+=dx)) {
-          ensure((VALID_FILE_MASK&file)==(u32)file, "file = \x1b[0x44E4]%ld\x1b[0x1484]\nVALID_FILE_MASK&file = \x1b[0x44E4]%lu\x1b[0x1484]", file, file&VALID_FILE_MASK);
+          ensure((VALID_FILE_MASK&file)==(u32)file, 
+                  "file = \x1b[0x44E4]%ld\x1b[0x1484]\nVALID_FILE_MASK&file = "
+                  "\x1b[0x44E4]%lu\x1b[0x1484]", file, file&VALID_FILE_MASK);
           if (EMPTY_IDX!=BOARD_DATA[BOARD_IDX(check_against)]) {
             valid = FALSE;
             break;

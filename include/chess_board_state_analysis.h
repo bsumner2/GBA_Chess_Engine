@@ -31,6 +31,17 @@ EWRAM_CODE Mvmt_Dir_e BoardState_PiecePinDirection(
                                                const BoardState_t *board_state,
                                                ChessPiece_e piece_id);
 
+typedef enum e_board_state_castle_legality_status {
+  BOARD_STATE_CASTLE_BLOCKED_BY_CHECK = -3,
+  BOARD_STATE_CASTLE_BLOCKED_BY_PATH_ATTACK_PT,
+  BOARD_STATE_CASTLE_CASTLE_BLOCKED_BY_REVEALED_CHECK,
+  BOARD_STATE_CASTLE_OK
+} ALIGN(4) BoardState_CastleLegalityStatus_t;
+
+EWRAM_CODE int BoardState_Validate_CastleLegaility(
+                                              const BoardState_t *board_state,
+                                              ChessBoard_Idx_t dst);
+
 #define BoardState_PiecePinned(board_state, piece_id)\
     (INVALID_MVMT_FLAGBIT!=BoardState_PiecePinDirection(board_state, piece_id))
 

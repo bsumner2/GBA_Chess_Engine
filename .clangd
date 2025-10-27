@@ -3,7 +3,7 @@ CompileFlags:
   Add: [ -xc, -std=c23, -O2, -Wall, -Wextra, -Wno-empty-translation-unit, 
     -Wno-unknown-attributes, -pedantic, -I../include, 
     -I/opt/devkitpro/devkitARM/arm-none-eabi/include, -I../lib/include,
-    -D_DEBUG_BUILD_
+    -D_AI_VISUALIZE_MOVE_CANDIDATES_
   ]
   Compiler: arm-none-eabi-gcc
 ---

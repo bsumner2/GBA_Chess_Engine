@@ -2,6 +2,7 @@
 /** Free to use, but this copyright message must remain here */
 #include <GBAdev_functions.h>
 #include <GBAdev_memmap.h>
+#include "GBAdev_memdef.h"
 #include "GBAdev_types.h"
 #include "chess_ai_types.h"
 #include "chess_board_state_analysis.h"
@@ -39,6 +40,8 @@ typedef union u_chess_ai_piece_tracker {
   ChessPiece_Tracker_t ctx_compat;
 } ChessAI_PieceTracker_t;
 
+
+
 static EWRAM_BSS TranspositionTable_t g_ttable;
 #ifdef _AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_
 #include "chess_obj_sprites_data.h"
@@ -55,6 +58,33 @@ static IWRAM_CODE void ChessAI_SearchVisualize_Move(
 INLN IWRAM_CODE void UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(int sel_idx,
                                                       ChessBoard_Idx_t coord);
 
+#elifdef _AI_VISUALIZE_MOVE_CANDIDATES_
+#include "chess_obj_sprites_data.h"
+#define SPRITE_VRAM_TILE_IDX(sprite_type) (2*TILES_PER_CSPR*sprite_type)
+#define SEL_INITIALIZER ((Obj_Attr_t) {\
+    .attr0.regular = {  \
+      .affine_mode=FALSE,  \
+      .disable = FALSE,  \
+      .mode = OBJ_GFX_MODE_BLEND,  \
+      .shape = CHESS_OATTR_SHAPE_VALUE,  \
+      .pal_8bpp = TRUE,  \
+      .mosaic = FALSE,  \
+      .y = 0  \
+    },  \
+    .attr1.regular = {  \
+      .hflip = FALSE,  \
+      .obj_size = CHESS_OATTR_SIZE_VALUE,  \
+      .vflip = FALSE,  \
+      .x = 0,  \
+    },  \
+    .attr2 = {  \
+      .priority = 1,  \
+      .sprite_idx = SPRITE_VRAM_TILE_IDX(EMPTY_IDX)  \
+    }  \
+  })
+static EWRAM_BSS ChessObj_Mvmt_Sel_t _L_sels;
+INLN IWRAM_CODE void UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(int sel_idx,
+                                                      ChessBoard_Idx_t coord);
 #else
 #define UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(dummy_field0, dummy_field1)
 #endif  /* _AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_ */
@@ -209,6 +239,14 @@ void UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(int sel_idx, ChessBoard_Idx_t coord) {
            1);
 }
 #else
+#ifdef _AI_VISUALIZE_MOVE_CANDIDATES_
+void UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(int sel_idx, ChessBoard_Idx_t coord) {
+  UPDATE_PIECE_SPRITE_LOCATION(&_L_sels[sel_idx], coord);
+  OAM_Copy(&OAM_ATTR[SEL_OAM_IDX_OFS+sel_idx], 
+           &_L_sels[sel_idx],
+           1);
+}
+#endif  /* _AI_VISUALIZE_MOVE_CANDIDATES_ */
 #define ChessAI_ResetPieceVisualizer(dummy_field)
 #define ChessAI_SearchVisualize_Move(dummy_field0, dummy_field1, dummy_field2)
 #endif  /* defined(_AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_) */
@@ -225,6 +263,10 @@ IWRAM_CODE void ChessAI_Params_Init(ChessAI_Params_t *obj,
   obj->depth = depth;
   obj->gen = 0;
   obj->team = CONVERT_CTX_MOVE_FLAG(team);
+#ifdef _AI_VISUALIZE_MOVE_CANDIDATES_
+  Fast_Memcpy32(&_L_sels[0], &SEL_INITIALIZER, sizeof(Obj_Attr_t)/sizeof(WORD));
+  Fast_Memcpy32(&_L_sels[1], &_L_sels[0], sizeof(Obj_Attr_t)/sizeof(WORD));
+#endif  /* _AI_VISUALIZE_MOVE_CANDIDATES_ */
 }
 
 IWRAM_CODE void ChessAI_Move(ChessAI_Params_t *ai_params,
@@ -316,7 +358,7 @@ IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(
                         ? INT16_MIN
                         : INT16_MAX;
   ChessBoard_Idx_Compact_t src;
-  BOOL prune=FALSE;
+  BOOL prune=FALSE, skip_castles = FALSE;
   params->root_state = &move_applied_state;  // switch out params board state 
                                              // ptr to the addr of the mutable 
                                              // local board state.
@@ -328,6 +370,12 @@ IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(
     v = PREMOVE_ROOT_STATE->graph.vertices[i];
 
     src = v.location;
+#ifdef _AI_VISUALIZE_MOVE_CANDIDATES_
+    if (MAX_DEPTH==params->depth) {
+      UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(0, 
+                                       BOARD_IDX_CONVERT(src, NORMAL_IDX_TYPE));
+    }
+#endif
 
     ChessMoveIterator_Alloc(&movegen, BOARD_IDX_CONVERT(src, NORMAL_IDX_TYPE),
                             PREMOVE_ROOT_STATE,
@@ -336,15 +384,41 @@ IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(
     while (ChessMoveIterator_HasNext(&movegen)) {
       // copy immutable initial root state to the local mutable root state, 
       // so that it's ready to have the move applied to it.
+#ifndef _AI_VISUALIZE_MOVE_CANDIDATES_
       UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(0, 
                                        BOARD_IDX_CONVERT(src, NORMAL_IDX_TYPE));
+#endif  /* NDEF _AI_VISUALIZE_MOVE_CANDIDATES_ */
       Fast_Memcpy32(&move_applied_state,
                     PREMOVE_ROOT_STATE,
                     sizeof(BoardState_t)/sizeof(WORD));
       ChessMoveIterator_Next(&movegen, &move);
+#ifdef _AI_VISUALIZE_MOVE_CANDIDATES_
+      if (MAX_DEPTH==params->depth) {
+        UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(1, move.dst);
+      }
+#else
       UPDATE_MOVE_TRAVERSAL_SEL_SPRITE(1, move.dst);
       Debug_Ksync(A, KSYNC_CONTINUOUS);
+#endif  /* _AI_VISUALIZE_MOVE_CANDIDATES_ */
+      // 4. Validate move special cases
+      if (KING==i_base) {
+        if (MOVE_CASTLE_MOVE_FLAGS_MASK&move.special_flags) {
+          if (skip_castles)
+            continue;
+          BoardState_CastleLegalityStatus_t
+            stat = BoardState_Validate_CastleLegaility(&move_applied_state,
+                                                       move.dst);
+          if (0>stat) {
+            if (stat!=BOARD_STATE_CASTLE_BLOCKED_BY_CHECK)
+              continue;
+            skip_castles = TRUE;
+            continue;
+          }
+          assert(BOARD_STATE_CASTLE_OK==stat);
+        }
+      }
       // 4. Apply move
+
       BoardState_ApplyMove(&move_applied_state, &move, src);
       if (BoardState_KingInCheck(&move_applied_state,
                                  ALLIED_KING,

@@ -19,9 +19,12 @@ of the game:
 - CPU Engine Features (requires recompilation with predefs, see
   specific Makefile predef commands for each optional feature listed farther below):
     - Engine Analysis Features
-        - Engine Movement Visualizer
+        - Engine Decision Tree Visualizer
         - Decision Tree Traversal using GBA Keypad to step through DFS traversal
-    Engine Behaviour Features
+        - Engine Move Options Visualizer: Similar to Decision Tree Visualizer,
+          with only diff being that it only highlights the move choices for
+          AI's current turn, but not any of the follow up move analysis.
+    - Engine Behaviour Features
         - Change maximum depth of Engine's decision tree
 
 ### Gameplay Footage
@@ -41,7 +44,7 @@ only starts getting smart at MAX_DEPTH=3
 
 ### Build commands for custom predefs:
 
-#### Engine Movement Visualizer Predef:
+#### Engine Decision Visualizer Predef:
 
 Predefine this feature with preprocessor macro *_AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_*
 e.g.:
@@ -68,3 +71,33 @@ e.g.:
 $ make clean build MACROS="-DMAX_DEPTH=4"
 ```
 
+#### Engine Move Options Visualizer
+
+Predefine this feature with preprocessor macro *_AI_VISUALIZE_MOVE_CANDIDATES_*
+
+```shell
+$ make clean build MACROS="-D_AI_VISUALIZE_MOVE_CANDIDATES_"
+```
+
+#### Mix and match features with build var predef for MACROS:
+
+- *MAX_DEPTH* macro can be mixed and match with any other macros
+- *_AI_VISUALIZE_MOVE_CANDIDATES_* and *_AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_* 
+  are mutually exclusive, meaning you can't enable both. Only one or the other.
+- *_DEBUG_BUILD_* macro automatically enables 
+  *_AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_*, and cannot choose *_DEBUG_BUILD_*
+  with *_AI_VISUALIZE_MOVE_CANDIDATES_*, which is incompatible with 
+  *_AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_*
+
+So basically, MAX_DEPTH is compatible with any other feature, but the rest 
+should be treated as mutually exclusive. In the future, I'm gonna add a 
+feature to let these all be available in-game, and features can be configured
+during runtime.
+
+##### Examples:
+
+Enable Stepwise Decision Tree Traversal and set custom max depth of 4
+
+```shell
+$ make clean build MACROS="-DMAX_DEPTH=4 -D_DEBUG_BUILD_"
+```

@@ -193,20 +193,23 @@ extern "C" {
 #define OBJ_SHAPE_WIDE              1
 #define OBJ_SHAPE_TALL              2
 
-#define OBJ_SHAPE_8x8               0
-#define OBJ_SHAPE_16x16             1
-#define OBJ_SHAPE_32x32             2
-#define OBJ_SHAPE_64x64             3
+#define OBJ_SIZE_VALUE(shape, width, height)\
+  OBJ_SIZE_##shape##_##width##x##height
 
-#define OBJ_SHAPE_16x8              0
-#define OBJ_SHAPE_32x8              1
-#define OBJ_SHAPE_32x16             2
-#define OBJ_SHAPE_64x32             3
+#define OBJ_SIZE_SQUARE_8x8         0
+#define OBJ_SIZE_SQUARE_16x16       1
+#define OBJ_SIZE_SQUARE_32x32       2
+#define OBJ_SIZE_SQUARE_64x64       3
 
-#define OBJ_SHAPE_8x16              0
-#define OBJ_SHAPE_8x32              1
-#define OBJ_SHAPE_16x32             2
-#define OBJ_SHAPE_32x64             3
+#define OBJ_SIZE_WIDE_16x8          0
+#define OBJ_SIZE_WIDE_32x8          1
+#define OBJ_SIZE_WIDE_32x16         2
+#define OBJ_SIZE_WIDE_64x32         3
+
+#define OBJ_SIZE_TALL_8x16          0
+#define OBJ_SIZE_TALL_8x32          1
+#define OBJ_SIZE_TALL_16x32         2
+#define OBJ_SIZE_TALL_32x64         3
 
 #define BG_REGULAR_32x32_BLOCKS     0
 #define BG_REGULAR_64x32_BLOCKS     1

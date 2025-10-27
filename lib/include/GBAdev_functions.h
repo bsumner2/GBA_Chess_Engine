@@ -14,8 +14,8 @@ extern "C" {
 #else
 #define SUPERVISOR_CALL(idx) __asm volatile ("SVC\t" #idx "<<16" ::: "r0", "r1", "r2", "r3")
 #endif
-EWRAM_CODE BOOL SRAM_Write(const void *src, u32 size, u32 offset);
-EWRAM_CODE BOOL SRAM_Read(void *dst, u32 size, u32 offset);
+BOOL SRAM_Write(const void *src, u32 size, u32 offset);
+BOOL SRAM_Read(void *dst, u32 size, u32 offset);
 
 IWRAM_CODE void Fast_Memcpy32(void *dst, const void *src, u32 word_ct);
 IWRAM_CODE void Fast_Memset32(void *dst, u32 fill_word, u32 word_ct);
@@ -49,7 +49,7 @@ void IRQ_Add_Callback(void (*)(void));
 INLN void OAM_Copy(Obj_Attr_t *dst, const Obj_Attr_t *src, u32 count);
 
 
-void OAM_Copy(Obj_Attr_t *dst, const Obj_Attr_t *src, u32 count) {
+INLN void OAM_Copy(Obj_Attr_t *dst, const Obj_Attr_t *src, u32 count) {
   Fast_Memcpy32(dst, src, count<<1);
 }
 
