@@ -279,6 +279,7 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
   if (BLACK_TO_MOVE_FLAGBIT&whose_move)
     zobrist_key^=SIDE_TO_MOVE_ZKEY_ENT(zobrist_table);
   zobrist_key^=CASTLE_ZKEY_ENTS(zobrist_table)[castle_rights];
+  zobrist_key^=CASTLE_FORFEITURE_ZKEY_ENTS(zobrist_table)[castle_forfeitures];
   if (En_Passent_Possible(ctx->board_data, whose_move, state->ep_file)) {
     zobrist_key^=EN_PASSENT_ZKEY_ENTS(zobrist_table)[state->ep_file];
   } else {
@@ -331,13 +332,24 @@ EWRAM_CODE BoardState_t *Graph_FromCtx(BoardState_t *board_state,
     cur_adj.all = 0;
     loc_compact = BOARD_IDX_CONVERT(loc, COMPACT_IDX_TYPE);
      
-    assert(ChessMoveIterator_Alloc(&iterator, loc, board_state, MV_ITER_MOVESET_COLLISIONS_ONLY_SET));
+    assert(ChessMoveIterator_Alloc(&iterator, 
+                                   loc,
+                                   board_state,
+                                   MV_ITER_MOVESET_COLLISIONS_ONLY_SET));
     for (BOOL hasnext = ChessMoveIterator_Next(&iterator, &mv);
          hasnext;
          hasnext = ChessMoveIterator_Next(&iterator, &mv)) {
 //      assert(ChessMoveIterator_Next(&iterator, &mv));
-      assert((EMPTY_IDX!=board_data[BOARD_IDX(mv.dst)])
-              ^ (0!=(mv.special_flags&MOVE_EN_PASSENT)));
+      if (0!=(mv.special_flags&MOVE_EN_PASSENT)) {
+        assert(EMPTY_IDX == board_data[BOARD_IDX(mv.dst)]);
+        hit_piece_query_obj.location.coord.x = mv.dst.coord.x;
+        hit_piece_query_obj.location.coord.y = loc.coord.y;
+        assert(PAWN_IDX 
+            == (PIECE_IDX_MASK
+                 & board_data[BOARD_IDX(hit_piece_query_obj.location)]));
+      } else {
+        assert(EMPTY_IDX!=board_data[BOARD_IDX(mv.dst)]);
+      }
       hit_piece_query_obj.location = mv.dst;
       ctx_vert = Graph_Get_Vertex(ctx_graph, &hit_piece_query_obj);
       assert(NULL!=ctx_vert);
@@ -388,10 +400,9 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
   };
   u32 moving_idx = board_state->graph.vertex_hashmap[BOARD_IDX(move[0])];
   ChessPiece_e moving_piece = board_state->board[BOARD_IDX(move[0])],
-               moving_side = (moving_idx&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT
-                  ? WHITE_FLAGBIT
-                  : BLACK_FLAGBIT), moving_piece_type;
+               moving_side, moving_piece_type;
   Move_Validation_Flag_e flags = move_data->special_flags;
+  moving_side = moving_piece&PIECE_TEAM_MASK;
   moving_piece_type = moving_piece&PIECE_IDX_MASK;
 
   assert((moving_piece_type|moving_side)==moving_piece);
@@ -481,7 +492,7 @@ EWRAM_CODE BoardState_t *BoardState_ApplyMove(BoardState_t *board_state,
   board_state->graph.vertex_hashmap[BOARD_IDX(move[1])] = moving_idx;
   if (0!=move_data->promotion_flag) {
     assert(PAWN_IDX==moving_piece_type);
-    moving_piece = move_data->promotion_flag;
+    moving_piece = moving_side|move_data->promotion_flag;
   }
 
   board_state->board[BOARD_IDX(move[1])] = moving_piece;
@@ -577,9 +588,11 @@ EWRAM_CODE void BoardState_UpdateZobristKey(BoardState_t *board_state) {
   u64 zobrist_key = 0ULL;
   u32 whose_move =board_state->state.side_to_move,
       castle_rights = board_state->state.castle_rights,
+      castle_forfeitures = board_state->state.castle_rights_forfeiture,
       ep_file = board_state->state.ep_file;
   // assert castle_rights is repping a valid state
   assert((castle_rights&ZOBRIST_CASTLE_ID_MASK) == castle_rights);
+  assert((castle_forfeitures&ZOBRIST_CASTLE_ID_MASK)==castle_forfeitures);
   for (u32 curpiece, file, row=ROW_8; CHESS_BOARD_ROW_COUNT>row; ++row) {
     for (file=FILE_A; CHESS_BOARD_FILE_COUNT>file; ++file) {
       curpiece = board_state->board[row][file];
@@ -590,12 +603,12 @@ EWRAM_CODE void BoardState_UpdateZobristKey(BoardState_t *board_state) {
                                     [ZID_FROM_BOARD_PIECE_DATA(curpiece)];
     }
   }
-  ;
   if (BLACK_TO_MOVE_FLAGBIT&whose_move)
     zobrist_key^=SIDE_TO_MOVE_ZKEY_ENT(zobrist_table);
   zobrist_key^=CASTLE_ZKEY_ENTS(zobrist_table)[castle_rights];
   if (En_Passent_Possible(board_state->board, whose_move, ep_file))
     zobrist_key^=EN_PASSENT_ZKEY_ENTS(zobrist_table)[ep_file];
+  zobrist_key ^= CASTLE_FORFEITURE_ZKEY_ENTS(zobrist_table)[castle_forfeitures];
   board_state->zobrist = zobrist_key;
 }
 
@@ -606,7 +619,8 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
   ChessBoard_Idx_t cur_loc;
   ChessMoveIterator_t iterator;
   PieceState_Graph_Vertex_t *vertices = board_state->graph.vertices;
-  const u8 (*const vmap)[CHESS_BOARD_ROW_COUNT] = board_state->graph.vertex_hashmap;
+  const u8 
+    (*const vmap)[CHESS_BOARD_FILE_COUNT] = board_state->graph.vertex_hashmap;
   const ChessBoard_Row_t *board = board_state->board;
   PieceAdjacencyFields_t cur_adjbits;
   u32 hit_idx;
@@ -622,7 +636,10 @@ EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
     assert(vmap[BOARD_IDX(cur_loc)]==i);
     curpiece = board[BOARD_IDX(cur_loc)];
     assert(EMPTY_IDX!=curpiece);
-    assert(ChessMoveIterator_Alloc(&iterator, cur_loc, board_state, MV_ITER_MOVESET_COLLISIONS_ONLY_SET));
+    assert(ChessMoveIterator_Alloc(&iterator,
+                                   cur_loc,
+                                   board_state,
+                                   MV_ITER_MOVESET_COLLISIONS_ONLY_SET));
     cur_adjbits.all = 0;
     while (ChessMoveIterator_HasNext(&iterator)) {
       assert(ChessMoveIterator_Next(&iterator, &mv_iter));

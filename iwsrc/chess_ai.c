@@ -516,6 +516,39 @@ IWRAM_CODE i16 Piece_Eval(ChessPiece_e piece) {
   }
 }
 
+IWRAM_CODE i16 Piece_Development_Eval(ChessPiece_Roster_Id_e rid) {
+  switch (rid) {
+  case ROOK0:
+  case ROOK1:
+    return 0;
+  case KNIGHT0:
+  case KNIGHT1:
+    return 100;
+  case BISHOP0:
+  case BISHOP1:
+    return 200;
+  case QUEEN:
+    return 50;
+  case KING:
+    return 0;
+  case PAWN0:
+  case PAWN1:
+  case PAWN2:
+    return 20;
+  case PAWN3:
+  case PAWN4:
+    return 200;
+  case PAWN5:
+  case PAWN6:
+  case PAWN7:
+    return 20;
+    break;
+  default:
+    assert((rid&PIECE_ROSTER_ABS_ID_MASK) == rid);
+  }
+  return 0;
+}
+
 IWRAM_CODE i16 Positional_Eval(ChessPiece_e piece,
                                ChessBoard_Idx_Compact_t loc) {
   ChessBoard_File_e x=loc.coord.x;
@@ -530,31 +563,82 @@ IWRAM_CODE i16 Positional_Eval(ChessPiece_e piece,
 }
 
 IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state, 
-                               Move_Validation_Flag_e last_move) {
+           __INTENT__(UNUSED) Move_Validation_Flag_e last_move) {
 
   PieceState_Graph_Vertex_t v;
   const PieceState_Graph_Vertex_t *vertices = state->graph.vertices;
 
   const ChessPiece_Roster_t ROSTER_STATE = state->graph.roster;
   const ChessPiece_e (*board)[CHESS_BOARD_ROW_COUNT] = state->board;
+  const u8 (*vmap)[CHESS_BOARD_FILE_COUNT] = state->graph.vertex_hashmap;
   const u16 NONFORFEITED_CASTLE_FLAGS = NON_FORFEITED_CASTLE_RIGHTS(state);
-  i16 score=0, base, tactical;
+  i16 score=0, base, tactical, white_check_count = 0, black_check_count = 0;
   ChessPiece_e piece;
-  BOOL is_white;
-  for (u32 i=0; CHESS_TOTAL_PIECE_COUNT>i; ++i) {
+  for (u32 j, i=0; CHESS_TOTAL_PIECE_COUNT>i; ++i) {
     if (!CHESS_ROSTER_PIECE_ALIVE(ROSTER_STATE, i))
       continue;
     v=vertices[i];
+    if (i&PIECE_ROSTER_ID_WHITE_TEAM_FLAGBIT) {
+      if (v.edges.all&(1<<BLACK_ROSTER_ID(KING))) {
+        int counter_count = 0;
+        for (j=0; CHESS_TEAM_PIECE_COUNT>j; ++j) {
+          if (vertices[BLACK_ROSTER_ID(j)].edges.all&(1<<i)) {
+            ++counter_count;
+          }
+        }
+        black_check_count += 50 - (counter_count*50)/CHESS_TEAM_PIECE_COUNT;
+      }
+    } else if (v.edges.all&(1<<WHITE_ROSTER_ID(KING))) {
+      int counter_count = 0;
+      for (j=0; CHESS_TEAM_PIECE_COUNT>j; ++j) {
+        if (vertices[BLACK_ROSTER_ID(j)].edges.all&(1<<i)) {
+          ++counter_count;
+        }
+      }
+      white_check_count += 50 - (counter_count*50)/CHESS_TEAM_PIECE_COUNT;
+    }
+
     piece = board[BOARD_IDX(v.location)];
-    is_white = WHITE_FLAGBIT==(piece&PIECE_TEAM_MASK);
     base = Piece_Eval(PIECE_IDX_MASK&piece);
     tactical=0;
     tactical+=10*v.attacking_count;
     tactical+=5*v.defending_count;
     tactical+=Positional_Eval(PIECE_IDX_MASK&piece, v.location);
-    score += is_white ? (base+tactical)
+    score += WHITE_FLAGBIT&piece ? (base+tactical)
                       : -(base+tactical);
   }
+
+  assert((0==white_check_count) || (0==black_check_count));
+  if (white_check_count) {
+    score -= white_check_count;
+  } else if (black_check_count) {
+    score += black_check_count;
+  } /*else {
+    // Developed pieces affect eval iff neither team in check.
+    i16 pieces_developed[2];
+    
+    for (u32 row, j,i,ibase=0; CHESS_TEAM_PIECE_COUNT>ibase;++ibase) {
+      for (j = 0;
+           2>j;++j) {
+        i = ibase|(j<<4);
+        if (!(state->graph.roster.all&(1<<i))) {
+          continue;
+        }
+
+        if (j) {
+          row = (PAWN0&i) ? ROW_2 : ROW_1;
+        } else {
+          row = (PAWN0&i) ? ROW_7 : ROW_8;
+        }
+        if(i != vmap[row][i&VALID_FILE_MASK])
+          pieces_developed[j] += Piece_Development_Eval(ibase);
+      }
+    }
+    score += pieces_developed[1];
+    score -= pieces_developed[0];
+  }*/
+
+
   for (u16 flag=1; flag&ALL_CASTLE_RIGHTS_MASK; flag<<=1) {
     /* Truth table:
      *  curflag HIGH | white flag | positive score change
@@ -574,13 +658,11 @@ IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
     */
     if ((0!=(NONFORFEITED_CASTLE_FLAGS&flag))
               ^(0!=(WHITE_CASTLE_RIGHTS_MASK&flag)))
-      score -= 100;
+      score -= 1000;
     else
-      score += 100;
+      score += 1000;
   }
-  if (last_move&MOVE_CASTLE_MOVE_FLAGS_MASK) {
-    score+=(WHITE_TO_MOVE_FLAGBIT==state->state.side_to_move) ? 50 : -50;
-  }
+
   return score;
 
 }

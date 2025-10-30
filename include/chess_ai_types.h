@@ -10,6 +10,13 @@
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
+
+#define DEFAULT_MAX_DEPTH 2
+
+#ifndef MAX_DEPTH
+#define MAX_DEPTH DEFAULT_MAX_DEPTH
+#endif
+
 #define CASTLE_FLAG_COUNT 4
 
 #define NO_VALID_EN_PASSENT_FILE ((u8)0xFFU)

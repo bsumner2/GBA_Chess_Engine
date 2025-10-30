@@ -5,11 +5,14 @@
 #define _CHESS_TRANSPOSITION_TABLE_
 #include "chess_board.h"
 #include "chess_board_state.h"
+#include "chess_ai_types.h"
 #include <GBAdev_types.h>
 #include <GBAdev_util_macros.h>
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
+
+#define TTENT_TIME_TO_LIVE (MAX_DEPTH/2 + 2)
 
 #define TTABLE_CLUSTER_SIZE 2
 #define TTABLE_SIZE (1<<12)
@@ -39,7 +42,7 @@ typedef struct s_transposition_table {
 
 
 
-IWRAM_CODE BOOL TTable_Probe(const TTable_t *tt, 
+IWRAM_CODE BOOL TTable_Probe(TTable_t *tt, 
                              TTableEnt_t *query_entry) ;
 
 IWRAM_CODE void TTable_Insert(TTable_t *tt, const TTableEnt_t *entry);

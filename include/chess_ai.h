@@ -10,11 +10,7 @@
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
-#define DEFAULT_MAX_DEPTH 2
 
-#ifndef MAX_DEPTH
-#define MAX_DEPTH DEFAULT_MAX_DEPTH
-#endif
 
 typedef struct s_board_state BoardState_t;
 
