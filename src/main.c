@@ -105,7 +105,7 @@ int main(void) {
     ChessBG_Init();
     ChessGameCtx_Init(&context);
     if (0!=cpu_team_side) {
-      assert(PIECE_TEAM_MASK!=cpu_team_side);
+//      assert(PIECE_TEAM_MASK!=cpu_team_side);
       ai_board_state_tracker = BoardState_Alloc();
       assert(ai_board_state_tracker!=NULL);
       ChessAI_Params_Init(&ai,

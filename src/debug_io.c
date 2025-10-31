@@ -62,7 +62,7 @@ void Debug_PrintfAndExitInternal(const char *__restrict func, u32 line,
   vsnprintf(output_string, len+1, fmt, args);
   va_end(args);
   mode3_printf(0,0, ERR_LABEL_CLR, 
-               "[Error @ %s:%lu]:\x1b[" TO_EXP_STR(DEF_ERR_MSG_CLR) "]%s",
+               "[Error @ %s:%lu]:\x1b[" TO_EXP_STR(DEF_ERR_MSG_CLR) "] %s",
                func,
                line,
                output_string);

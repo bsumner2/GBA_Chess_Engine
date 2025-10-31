@@ -34,11 +34,22 @@ extern "C" {
   __attribute__ (( __format__ (__printf__, fmt_arg_no, first_variadic_arg_no) ))
 
 #define DO_PRAGMA(pg) _Pragma (#pg)
+#define DIAGNOSTICS_SUPPRESS(_diagnostic) \
+  DO_PRAGMA(GCC diagnostic ignored #_diagnostic)
+
+#define BEGIN_DIAGNOSTIC_SUPPRESSION(_diagnostic)  \
+  _Pragma("GCC diagnostic push")  \
+  DO_PRAGMA(GCC diagnostic ignored #_diagnostic)
+
+#define END_DIAGNOSTIC_SUPPRESSION()  \
+  _Pragma("GCC diagnostic pop")
+
 #define TODO(msg) DO_PRAGMA(message("TODO: " #msg))
 
 #define INLN static inline
 
-#define ASM(...) __asm volatile (__VA_ARGS__)
+#define ASM(...) __asm volatile (__VA_ARGS__) 
+
 
 
 #ifdef __cplusplus

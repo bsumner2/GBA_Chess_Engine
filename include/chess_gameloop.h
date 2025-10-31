@@ -60,6 +60,10 @@ void ChessGame_UpdateMoveHistory(ChessGameCtx_t *ctx,
                                  Move_Validation_Flag_e move_outcome,
                                  BOOL promotion_occurred);
 
+void ChessGame_UpdateVertexEdges(const ChessBoard_t board_data,
+                                 Graph_t *pgraph,
+                                 GraphNode_t *moving_vert);
+
 int ObjAttrCmp(const void *a, const void *b);
 
 

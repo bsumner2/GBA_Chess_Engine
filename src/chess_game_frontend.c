@@ -90,7 +90,6 @@ int M3FE_SelGamemode(void) {
       return PIECE_TEAM_MASK^(cur<<12);
       break;
     case GAME_MODE_CPU_V_CPU:
-      assert(CPU_X_CPU_IMPLEMENTED);
       return PIECE_TEAM_MASK;
       break;
     default:

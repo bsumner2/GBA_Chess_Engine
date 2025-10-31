@@ -40,6 +40,7 @@ static EWRAM_CODE BoardState_t *BoardState_UpdateGraphEdges(
                                                     BoardState_t *board_state);
 
 static EWRAM_CODE void BoardState_UpdateZobristKey(BoardState_t *board_state);
+
 EWRAM_CODE BOOL En_Passent_Possible(const ChessBoard_t board, 
                                          u32 side_to_move,
                                          ChessBoard_File_e ep_file) {

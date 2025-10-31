@@ -4,6 +4,7 @@
 #include <GBAdev_memmap.h>
 #include "GBAdev_memdef.h"
 #include "GBAdev_types.h"
+#include "GBAdev_util_macros.h"
 #include "chess_ai_types.h"
 #include "chess_board_state_analysis.h"
 #include "chess_gameloop.h"
@@ -15,11 +16,15 @@
 #include "debug_io.h"
 
 #ifdef _DEBUG_BUILD_
+#ifdef _DEBUG_OVERRIDE_KSYNC_
+#define Debug_Ksync(unused0, unused1)
+#else
 #define Debug_Ksync(k, v) Ksync(k, v)
+#endif  /* Override stepwise keypad control of DFS traversal */
 #define _AI_VISUALIZE_MOVE_SEARCH_TRAVERSAL_
 #else
 #define Debug_Ksync(unused1, unused2)
-#endif
+#endif  /* Debug mode DFS traversal stepping control macros */
 IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
                                Move_Validation_Flag_e last_move);
 
@@ -294,23 +299,13 @@ IWRAM_CODE void ChessAI_Move(ChessAI_Params_t *ai_params,
   ++ai_params->gen;
 }
 
+
+
 IWRAM_CODE ChessAI_MoveSearch_Result_t ChessAI_ABSearch(
                                                       ChessAI_Params_t *params,
                                                       i16 alpha,
                                                       i16 beta) {
-  {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wuninitialized"
-
-    extern const void __iwram_overlay_end;
-    register void *sp __asm("sp");
-    
-    ensure(sp > &__iwram_overlay_end,
-        "\n\tsp=\x1b[0x44E4]%p\x1b[0x1484]\n\tEnd of stack=\x1b[0x44E4]%p",
-        sp,
-        (void*)&__iwram_overlay_end);
-#pragma GCC diagnostic pop
-  }
+  ENSURE_STACK_SAFETY();
 
     // 1. Check transposition table
   TTableEnt_t tt_entry = {
@@ -570,7 +565,6 @@ IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
 
   const ChessPiece_Roster_t ROSTER_STATE = state->graph.roster;
   const ChessPiece_e (*board)[CHESS_BOARD_ROW_COUNT] = state->board;
-  const u8 (*vmap)[CHESS_BOARD_FILE_COUNT] = state->graph.vertex_hashmap;
   const u16 NONFORFEITED_CASTLE_FLAGS = NON_FORFEITED_CASTLE_RIGHTS(state);
   i16 score=0, base, tactical, white_check_count = 0, black_check_count = 0;
   ChessPiece_e piece;
@@ -613,31 +607,7 @@ IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
     score -= white_check_count;
   } else if (black_check_count) {
     score += black_check_count;
-  } /*else {
-    // Developed pieces affect eval iff neither team in check.
-    i16 pieces_developed[2];
-    
-    for (u32 row, j,i,ibase=0; CHESS_TEAM_PIECE_COUNT>ibase;++ibase) {
-      for (j = 0;
-           2>j;++j) {
-        i = ibase|(j<<4);
-        if (!(state->graph.roster.all&(1<<i))) {
-          continue;
-        }
-
-        if (j) {
-          row = (PAWN0&i) ? ROW_2 : ROW_1;
-        } else {
-          row = (PAWN0&i) ? ROW_7 : ROW_8;
-        }
-        if(i != vmap[row][i&VALID_FILE_MASK])
-          pieces_developed[j] += Piece_Development_Eval(ibase);
-      }
-    }
-    score += pieces_developed[1];
-    score -= pieces_developed[0];
-  }*/
-
+  }
 
   for (u16 flag=1; flag&ALL_CASTLE_RIGHTS_MASK; flag<<=1) {
     /* Truth table:

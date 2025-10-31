@@ -38,6 +38,18 @@ extern "C" {
              : Debug_PrintfInternal(__PRETTY_FUNCTION__, __LINE__, s))
 
 
+#define ENSURE_STACK_SAFETY()  \
+  {  \
+     _Pragma("GCC diagnostic push")  \
+    DIAGNOSTICS_SUPPRESS(-Wuninitialized)  \
+    extern const void __iwram_overlay_end;  \
+    register void *sp __asm("sp");  \
+    ensure(sp > &__iwram_overlay_end,  \
+        "\n\tsp=\x1b[0x44E4]%p\x1b[0x1484]\n\tEnd of stack=\x1b[0x44E4]%p",  \
+        sp,  \
+        (void*)&__iwram_overlay_end);  \
+    _Pragma("GCC diagnostic pop")\
+  }
 
 const char *DebugIO_ChessPiece_ToString(ChessPiece_e piece);
 __attribute__ (( __format__ ( __printf__, 3, 4 ), __noreturn__ )) 

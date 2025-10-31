@@ -1092,7 +1092,8 @@ BOOL ChessBoard_ValidateKingMoveEvadesOpp(
     if (KNIGHT_MVMT_FLAGBIT&attack_dir)
       return TRUE;
     if (move_dir==attack_dir) {
-      return FALSE;
+      auxmove[1] = move[0];
+      return !ChessBoard_ValidateMoveClearance(board_data, auxmove, attack_dir);
     }
     if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, attack_dir))
       return TRUE;
@@ -1105,8 +1106,10 @@ BOOL ChessBoard_ValidateKingMoveEvadesOpp(
     if ((DIAGONAL_MVMT_FLAGBIT|KNIGHT_MVMT_FLAGBIT)&attack_dir)
       return TRUE;
     assert(1==__builtin_popcount(attack_dir&(HOR_MASK|VER_MASK)));
-    if (move_dir==attack_dir)
-      return FALSE;
+    if (move_dir==attack_dir) {
+      auxmove[1] = move[0];
+      return !ChessBoard_ValidateMoveClearance(board_data, auxmove, attack_dir);
+    }
     if (!ChessBoard_ValidateMoveClearance(board_data, auxmove, attack_dir))
       return TRUE;
     break;

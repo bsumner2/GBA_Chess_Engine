@@ -1160,6 +1160,265 @@ BOOL ChessGame_ValidateHasLegalMove(const ChessGameCtx_t *ctx,
 
 }
 
+void ChessGame_UpdateVertexEdges(const ChessBoard_t board_data,
+                                 Graph_t *pgraph,
+                                 GraphNode_t *moving_vert) {
+  Mvmt_Dir_e mvmts[8] = {
+    INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, 
+    INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT, 
+    INVALID_MVMT_FLAGBIT, INVALID_MVMT_FLAGBIT
+  };
+  ChessPiece_Data_t query = {0};
+  ChessBoard_Idx_t origin;
+  ChessPiece_Data_t *pdata = (ChessPiece_Data_t*)moving_vert->data;
+  GraphNode_t *new_hit;
+  u32 ally_flag,
+      opp_flag;
+
+  ChessPiece_e new_hit_piece, mpiece;
+  origin = pdata->location;
+  mpiece = GET_BOARD_AT_IDX(board_data, origin);
+  ally_flag = mpiece&PIECE_TEAM_MASK,
+  opp_flag  = ally_flag^PIECE_TEAM_MASK;
+  int ct = 0;
+  switch (mpiece&PIECE_IDX_MASK) {
+  case PAWN_IDX:
+    {
+      ChessBoard_Idx_t tmp[2] = {origin, origin};
+      if (ally_flag&WHITE_FLAGBIT) {
+        assert(ROW_8<origin.coord.y);
+        --tmp[0].coord.y;
+        --tmp[1].coord.y;
+      } else {
+        assert(ROW_1>origin.coord.y);
+        ++tmp[0].coord.y;
+        ++tmp[1].coord.y;
+      }
+      if (FILE_A < origin.coord.x) {
+        --tmp[0].coord.x;
+      }
+      if (FILE_H > origin.coord.x) {
+        ++tmp[1].coord.x;
+      }
+      for (int i = 0; i < 2; ++i) {
+        if (tmp[i].coord.x == origin.coord.x)
+          continue;
+        new_hit_piece = GET_BOARD_AT_IDX(board_data, tmp[i]);
+        if (!(new_hit_piece&opp_flag))
+          continue;
+        query.location = tmp[i];
+        new_hit = Graph_Get_Vertex(pgraph, &query);
+        assert(NULL!=new_hit);
+        assert(NULL!=new_hit->data);
+        assert(Graph_Add_Edge(pgraph, moving_vert->idx, new_hit->idx, 0));
+      }
+    }
+    ct = 0;
+    break;
+  case BISHOP_IDX: 
+    if (FILE_A < origin.coord.x) {
+      if (ROW_8 < origin.coord.y) {
+        mvmts[0] = UP_FLAGBIT|LEFT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+      if (ROW_1 > origin.coord.y) {
+        mvmts[1] = DOWN_FLAGBIT|LEFT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+    }
+    if (FILE_H > origin.coord.x) {
+      if (ROW_8 < origin.coord.y) {
+        mvmts[2] = UP_FLAGBIT|RIGHT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+      if (ROW_1 > origin.coord.y) {
+        mvmts[3] = DOWN_FLAGBIT|RIGHT_FLAGBIT|DIAGONAL_MVMT_FLAGBIT;
+      }
+    }
+    ct = 4;
+    break;
+  case ROOK_IDX:
+    {
+      if (FILE_A < origin.coord.x) {
+        mvmts[0] = LEFT_FLAGBIT;
+      }
+      if (FILE_H > origin.coord.x) {
+        mvmts[1] = RIGHT_FLAGBIT;
+      }
+      if (ROW_8 < origin.coord.y) {
+        mvmts[2] = UP_FLAGBIT;
+      }
+      if (ROW_1 > origin.coord.y) {
+        mvmts[3] = DOWN_FLAGBIT;
+      }
+    }
+    ct = 4;
+    break;
+  case KNIGHT_IDX:
+    {
+      ChessBoard_Idx_t idxs[8];
+      bool valid[8] = {0};
+      if (FILE_A < origin.coord.x) {
+        if (ROW_7 < origin.coord.y) {
+          idxs[0].coord = (struct s_chess_coord){
+            .x = origin.coord.x-1,
+            .y = origin.coord.y-2
+          };
+          valid[0] = TRUE;
+        }
+        if (FILE_B < origin.coord.x) {
+          if (ROW_8 < origin.coord.y) {
+            idxs[1].coord = (struct s_chess_coord){
+              .x=origin.coord.x-2,
+              .y=origin.coord.y-1
+            };
+            valid[1] = TRUE;
+          }
+          if (ROW_1 > origin.coord.y) {
+            idxs[2].coord = (struct s_chess_coord){
+              .x = origin.coord.x-2,
+              .y = origin.coord.y+1
+            };
+            valid[2] = TRUE;
+          }
+        }
+        if (ROW_2 > origin.coord.y) {
+          idxs[3].coord = (struct s_chess_coord){
+            .x = origin.coord.x-1,
+            .y = origin.coord.y+2
+          };
+          valid[3] = TRUE;
+        }
+      }
+      if (FILE_H > origin.coord.x) {
+        if (ROW_7 < origin.coord.y) {
+          idxs[4].coord = (struct s_chess_coord){
+            .x = origin.coord.x+1,
+            .y = origin.coord.y-2
+          };
+          valid[4] = TRUE;
+        }
+        if (FILE_G > origin.coord.x) {
+          if (ROW_8 < origin.coord.y) {
+            idxs[5].coord = (struct s_chess_coord){
+              .x = origin.coord.x+2,
+              .y = origin.coord.y-1
+            };
+            valid[5] = TRUE;
+          }
+          if (ROW_1 > origin.coord.y) {
+            idxs[6].coord = (struct s_chess_coord){
+              .x = origin.coord.x+2,
+              .y = origin.coord.y+1
+            };
+            valid[6] = TRUE;
+          }
+        }
+        if (ROW_2 > origin.coord.y) {
+          idxs[7].coord = (struct s_chess_coord){
+            .x = origin.coord.x+1,
+            .y = origin.coord.y+2
+          };
+          valid[7] = TRUE;
+        }
+      }
+      for (int i = 0; i < 8; ++i) {
+        if (!valid[i])
+          continue;
+        new_hit_piece = GET_BOARD_AT_IDX(board_data, idxs[i]);
+        if (!(new_hit_piece&opp_flag))
+          continue;
+        query.location = idxs[i];
+        new_hit = Graph_Get_Vertex(pgraph, &query);
+        assert(NULL!=new_hit);
+        assert(NULL!=new_hit->data);
+        assert(Graph_Add_Edge(pgraph, moving_vert->idx, new_hit->idx, 0));
+      }
+    }
+    ct = 0;
+    break;
+  case QUEEN_IDX:
+    if (FILE_A < origin.coord.x) {
+      mvmts[0] = LEFT_FLAGBIT;
+      mvmts[1] |= LEFT_FLAGBIT;
+      mvmts[2] |= LEFT_FLAGBIT;
+    }
+    if (FILE_H > origin.coord.x) {
+      mvmts[3] = RIGHT_FLAGBIT;
+      mvmts[4] |= RIGHT_FLAGBIT;
+      mvmts[5] |= RIGHT_FLAGBIT;
+    }
+    if (ROW_8 < origin.coord.y) {
+      mvmts[6] = UP_FLAGBIT;
+      mvmts[1] |= UP_FLAGBIT;
+      mvmts[4] |= UP_FLAGBIT;
+    }
+    if (ROW_1 > origin.coord.y) {
+      mvmts[7] = DOWN_FLAGBIT;
+      mvmts[2] |= DOWN_FLAGBIT;
+      mvmts[5] |= DOWN_FLAGBIT;
+    }
+    {
+      Mvmt_Dir_e curmv;
+      for (int i = 0, j; 6 > i; i+=3) {
+        for (j = 1; 3 > j; ++j) {
+          curmv = mvmts[i+j];
+          if ((curmv&HOR_MASK) && (curmv&VER_MASK)) {
+            mvmts[i+j]^=(DIAGONAL_MVMT_FLAGBIT|INVALID_MVMT_FLAGBIT);
+          }
+        }
+      }
+    }
+    ct = 8;
+    break;
+  case KING_IDX:
+    {
+      ChessBoard_Idx_t idx = origin;
+      int i, j, di;
+      for (j = -1; 2 > j; ++j, idx.coord.y=origin.coord.y) {
+        idx.coord.y += j;
+
+        if (0UL!=(idx.coord.y&~7UL))
+          continue;
+        di = 0==j ? 2 : 1;
+        for (i=-1; 2 > i; i+=di, idx.coord.x=origin.coord.x) {
+          idx.coord.x+=i;
+          if (0UL!=(idx.coord.x&~7UL))
+            continue;
+          new_hit_piece = GET_BOARD_AT_IDX(board_data, idx);
+          if (!(new_hit_piece&opp_flag))
+            continue;
+          query.location = idx;
+          new_hit = Graph_Get_Vertex(pgraph, &query);
+          assert(NULL!=new_hit);
+          assert(NULL!=new_hit->data);
+          assert(Graph_Add_Edge(pgraph, moving_vert->idx, new_hit->idx, 0));
+        }
+      }
+    }
+    ct = 0;
+    break;
+  default: assert(0);
+  }
+  if (0!=ct) {
+    Mvmt_Dir_e curmv;
+    for (int i = 0; i < ct; ++i) {
+      curmv = mvmts[i];
+      if (INVALID_MVMT_FLAGBIT==curmv)
+        continue;
+      if (!ChessBoard_FindNextObstruction(board_data,
+                                          &origin,
+                                          &query.location,
+                                          curmv))
+        continue;
+      new_hit_piece = GET_BOARD_AT_IDX(board_data, query.location);
+      if (!(new_hit_piece&opp_flag))
+        continue;
+      new_hit = Graph_Get_Vertex(pgraph, &query);
+      assert(NULL!=new_hit);
+      assert(NULL!=new_hit->data);
+      assert(Graph_Add_Edge(pgraph, moving_vert->idx, new_hit->idx, 0));
+    }
+  }
+}
+
 int ObjAttrCmp(const void *a, const void *b) {
   Obj_Attr_t *oa=*(Obj_Attr_t**)a, *ob=*(Obj_Attr_t**)b;
   return oa->attr2.sprite_idx-ob->attr2.sprite_idx;
