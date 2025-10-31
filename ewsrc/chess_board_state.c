@@ -349,9 +349,9 @@ EWRAM_CODE BoardState_t *Graph_FromCtx(BoardState_t *board_state,
             == (PIECE_IDX_MASK
                  & board_data[BOARD_IDX(hit_piece_query_obj.location)]));
       } else {
+        hit_piece_query_obj.location = mv.dst;
         assert(EMPTY_IDX!=board_data[BOARD_IDX(mv.dst)]);
       }
-      hit_piece_query_obj.location = mv.dst;
       ctx_vert = Graph_Get_Vertex(ctx_graph, &hit_piece_query_obj);
       assert(NULL!=ctx_vert);
       assert(CHESS_ROSTER_PIECE_ALIVE(roster, ctx_vert->idx));
