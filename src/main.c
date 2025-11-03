@@ -3,6 +3,7 @@
 #include <GBAdev_memmap.h>
 #include <GBAdev_memdef.h>
 #include <GBAdev_functions.h>
+#include <sys/reent.h>
 #include "key_status.h"
 #include "mode3_io.h"
 #include "chess_game_frontend.h"
@@ -13,7 +14,7 @@
 
 
 
-static ChessGameCtx_t context = {0};
+ChessGameCtx_t context = {0};
 static ChessAI_Params_t ai = {0};
 static BoardState_t *ai_board_state_tracker=NULL;
 static u32 outcome = 0;
@@ -104,6 +105,8 @@ int main(void) {
     REG_DPY_CNT = REG_FLAGS(DPY_CNT, BG0, OBJ, OBJ_1D);
     ChessBG_Init();
     ChessGameCtx_Init(&context);
+    
+    atexit(ChessMoveHistory_Save);
     if (0!=cpu_team_side) {
 //      assert(PIECE_TEAM_MASK!=cpu_team_side);
       ai_board_state_tracker = BoardState_Alloc();
@@ -135,6 +138,7 @@ int main(void) {
                    STALEMATE_MSG);
     }
     do IRQ_Sync(IRQ_FLAG(KEYPAD)); while (!KEY_STROKE(START));
+    ChessMoveHistory_Save();
     ChessGameCtx_Close(&context);
     if (ai_board_state_tracker) {
       ChessAI_Params_Uninit(&ai);

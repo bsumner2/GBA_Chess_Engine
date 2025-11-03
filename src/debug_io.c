@@ -10,6 +10,7 @@
 
 extern void IRQ_Sync(u32 flags);
 
+
 const char *DebugIO_ChessPiece_ToString(ChessPiece_e piece) {
   switch (piece) {
   case WHITE_FLAGBIT:
@@ -67,10 +68,8 @@ void Debug_PrintfAndExitInternal(const char *__restrict func, u32 line,
                line,
                output_string);
   free(output_string);
-  do {
-    IRQ_Sync(1<<IRQ_KEYPAD);
-    exit(1);
-  } while (1);
+  IRQ_Sync(1<<IRQ_KEYPAD);
+  exit(1);
 }
 
 PRINTF_LIKE(3, 4) void Debug_PrintfInternal(const char *__restrict func,
@@ -93,7 +92,7 @@ PRINTF_LIKE(3, 4) void Debug_PrintfInternal(const char *__restrict func,
   va_start(args, fmt);
   vsnprintf(outstr, len+1, fmt, args);
   va_end(args);
-  mode3_printf(0,0, ERR_LABEL_CLR, 
+  mode3_printf(0, 0, ERR_LABEL_CLR,
                "[Error @ %s:%lu]:\x1b[" TO_EXP_STR(DEF_ERR_MSG_CLR) "] %s",
                func,
                line,

@@ -1,11 +1,12 @@
-#include "GBAdev_memdef.h"
-#include "chess_ai_types.h"
-#include "chess_board.h"
+#include <GBAdev_memdef.h>
 #include <GBAdev_functions.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include "mode3_io.h"
+#include "chess_board.h"
+#include "chess_game_frontend.h"
+#include "subpixel.h"
 
-#define LSTRLEN(str) (sizeof(str)-1)
 
 #define DEFAULT_PGN_TAGS\
   "[Event \"GBA Chess Game\"]\n"\
@@ -91,3 +92,21 @@ void PGN_Save(const char *__restrict opp1,
   }
   SRAM_Write(&len, 4, SRAM_SIZE-4);
 }
+
+void ChessMoveHistory_Save(void) {
+  PGN_Round_LL_t *rll;
+  {
+    extern ChessGameCtx_t context;
+    rll = &context.move_hist;
+    assert(SRAM_Write(&context.whose_turn, 4, 4));
+  }
+  u32 sz;
+  sz = rll->nmemb * sizeof(PGN_Round_t);
+  assert(SRAM_Write(&sz, 4, 0));
+  sz = 8;
+  LL_FOREACH(PGN_Round_LL_Node_t *node, node, rll) {
+    assert(SRAM_Write(&node->data, sizeof(PGN_Round_t), sz));
+    sz+=sizeof(PGN_Round_t);
+  }
+}
+

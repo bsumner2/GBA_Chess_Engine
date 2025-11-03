@@ -4,6 +4,7 @@
 #ifndef _CHESS_GAME_FRONTEND_
 #define _CHESS_GAME_FRONTEND_
 
+#include "chess_board.h"
 #ifdef __cplusplus
 extern "C" {
 #endif  /* C++ Name mangler guard */
@@ -45,6 +46,8 @@ typedef enum e_game_mode_sel {
                   sizeof(u16)*M3_SCREEN_HEIGHT*M3_SCREEN_WIDTH/sizeof(WORD))
 
 int M3FE_SelGamemode(void);
+
+void ChessMoveHistory_Save(void);
 
 #ifdef __cplusplus
 }
