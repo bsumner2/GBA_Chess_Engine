@@ -110,9 +110,9 @@ with -D_DEBUG_OVERRIDE_KSYNC_.
 e.g.:
 
 ```shell
-$ make clean debug -D_DEBUG_OVERRIDE_KSYNC_
+$ make clean debug MACROS="-D_DEBUG_OVERRIDE_KSYNC_"
 # Or
-$ make clean gbuild -D_DEBUG_OVERRIDE_KSYNC_
+$ make clean gbuild MACROS="-D_DEBUG_OVERRIDE_KSYNC_"
 ```
 
 #### Custom Max Depth
