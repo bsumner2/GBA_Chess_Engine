@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <GBAdev_types.h>
 #include "GBAdev_memdef.h"
+#include "chess_game_frontend.h"
 #include "chess_gameloop.h"
 #include "mode3_io.h"
 #include "debug_io.h"
@@ -68,7 +69,7 @@ void Debug_PrintfAndExitInternal(const char *__restrict func, u32 line,
                line,
                output_string);
   free(output_string);
-  IRQ_Sync(1<<IRQ_KEYPAD);
+  Ksync(ANY, KSYNC_DISCRETE);
   exit(1);
 }
 

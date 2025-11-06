@@ -125,7 +125,18 @@ typedef struct s_chess_move_iteration {
    |PIECE_GRAPH_EMPTY_HASHENT<<16\
    |PIECE_GRAPH_EMPTY_HASHENT<<24)
 
-
+// I dont know what the hell the opposite of opaque would be in the context of
+// type opacity in CS, so I'm just gonna go with the literal opposite:
+// transparent
+#ifdef __TRANSPARENT_BOARD_STATE__
+struct s_board_state {
+  ChessBoard_t board;
+  GameState_t state;
+  u64 zobrist;
+  u32 i;
+  PieceState_Graph_t graph;
+};
+#endif
 
 #ifdef __cplusplus
 }

@@ -1,12 +1,13 @@
+/** 
+ * (C) Burt O Sumner 2025 Authorship rights reserved.
+ * Free to use so long as this credit comment remains visible here.
+ **/
+#define __TRANSPARENT_BOARD_STATE__
+
 #include "chess_ai.h"
 #include "chess_board.h"
 
-struct s_board_state {
-  ChessBoard_t board;
-  GameState_t state;
-  u64 zobrist;
-  PieceState_Graph_t graph;
-};
+
 
 ChessPiece_e BoardState_GetPiece(const BoardState_t *board_state,
                                             const ChessBoard_Idx_t coord) {

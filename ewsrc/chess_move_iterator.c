@@ -1,21 +1,17 @@
 /** (C) 16 of October, 2025 Burt Sumner */
 /** Free to use, but this copyright message must remain here */
+
+#define __TRANSPARENT_BOARD_STATE__
+
 #include <GBAdev_functions.h>
 #include <GBAdev_memmap.h>
 #include <GBAdev_types.h>
 #include <assert.h>
 #include "chess_board.h"
 #include "chess_move_iterator.h"
-#include "chess_gameloop.h"
 #include "chess_move_iterator_block_allocator.h"
 #include "debug_io.h"
-#include "key_status.h"
-struct s_board_state {
-  ChessBoard_t board;
-  GameState_t state;
-  u64 zobrist;
-  PieceState_Graph_t graph;
-};
+
 struct s_chess_move_iterator_private {
   u32 cur_move;
   ChessMoveIteration_t *moves;

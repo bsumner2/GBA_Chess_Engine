@@ -24,6 +24,9 @@ typedef enum e_game_mode_sel {
   GAME_MODE_CPU_V_CPU
 } GameModeSelection_e;
 
+#define TOSTRSTR(l) #l
+#define TOSTR(m) TOSTRSTR(m)
+
 #define SELECT_CLR 0x4167
 #define NORMAL_CLR 0x1484
 
@@ -47,7 +50,7 @@ typedef enum e_game_mode_sel {
 
 int M3FE_SelGamemode(void);
 
-void ChessMoveHistory_Save(void);
+void ChessMoveHistory_Save(const ChessGameCtx_t *ctx);
 
 #ifdef __cplusplus
 }

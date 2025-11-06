@@ -1,5 +1,4 @@
 #include <assert.h>
-#include <ctype.h>
 #include <stddef.h>
 #include <GBAdev_memmap.h>
 #include <string.h>
@@ -10,8 +9,7 @@
 #include "mode3_io.h"
 #include "subpixel.h"
 #include "chess_game_frontend.h"
-#define TOSTRSTR(l) #l
-#define TOSTR(m) TOSTRSTR(m)
+
 static const char *MODE_SEL_PROMPTS[4] = {
   "2-player mode",
   "1-player X CPU",
@@ -94,6 +92,7 @@ int M3FE_SelGamemode(void) {
       break;
     default:
       assert(SEL_MASK&cur);
+      return -1;
   }
 
 }

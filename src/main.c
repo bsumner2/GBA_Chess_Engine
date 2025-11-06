@@ -14,7 +14,7 @@
 
 
 
-ChessGameCtx_t context = {0};
+static ChessGameCtx_t context = {0};
 static ChessAI_Params_t ai = {0};
 static BoardState_t *ai_board_state_tracker=NULL;
 static u32 outcome = 0;
@@ -35,7 +35,9 @@ extern void ChessGame_AnimateMove(ChessGameCtx_t *ctx,
 
 
 
-
+static void __TESTING_FUNC_save_move_log(void) {
+  ChessMoveHistory_Save(&context);    
+}
 
 int main(void) {
 #ifdef TEST_KNIGHT_MVMT
@@ -106,7 +108,8 @@ int main(void) {
     ChessBG_Init();
     ChessGameCtx_Init(&context);
     
-    atexit(ChessMoveHistory_Save);
+    atexit(__TESTING_FUNC_save_move_log);
+
     if (0!=cpu_team_side) {
 //      assert(PIECE_TEAM_MASK!=cpu_team_side);
       ai_board_state_tracker = BoardState_Alloc();
@@ -138,7 +141,7 @@ int main(void) {
                    STALEMATE_MSG);
     }
     do IRQ_Sync(IRQ_FLAG(KEYPAD)); while (!KEY_STROKE(START));
-    ChessMoveHistory_Save();
+    ChessMoveHistory_Save(&context);
     ChessGameCtx_Close(&context);
     if (ai_board_state_tracker) {
       ChessAI_Params_Uninit(&ai);

@@ -11,6 +11,8 @@
  * Given the maths-heavy trajectory mapping, this function will have to be in
  * working ram.
  * */
+
+#define __TRANSPARENT_BOARD_STATE__
 #include <GBAdev_functions.h>
 #include <GBAdev_memmap.h>
 #include <GBAdev_util_macros.h>

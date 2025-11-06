@@ -1,18 +1,16 @@
 /** (C) 16 of October, 2025 Burt Sumner */
 /** Free to use, but this copyright message must remain here */
 
+#define __TRANSPARENT_BOARD_STATE__
+
+
 #include <GBAdev_types.h>
 #include <GBAdev_util_macros.h>
 #include "chess_ai_types.h"
 #include "chess_board.h"
 #include "debug_io.h"
 #include "chess_board_state_analysis.h"
-struct s_board_state {
-  ChessBoard_t board;
-  GameState_t state;
-  u64 zobrist;
-  PieceState_Graph_t graph;
-};
+
 static EWRAM_CODE BOOL BoardState_ValidateAttackVector(
                                                 const ChessBoard_Row_t *board,
                                                 const ChessBoard_Idx_t *move,

@@ -18,6 +18,7 @@ extern "C" {
 
 #define ALIGN(alignment) __attribute__ (( aligned(alignment) ))
 #define PACKED __attribute__ (( packed ))
+#define FORCE_INLINE __attribute__ (( always_inline ))
 
 /* Intent util macro suite is meant to provide semantic clarity for 
  * __attribute__ directives whose sole purpose is to get compiler to stop

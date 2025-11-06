@@ -12,7 +12,6 @@
 #include <GBAdev_memdef.h>
 #include <GBAdev_memmap.h>
 #include <GBAdev_functions.h>
-#include "chess_gameloop.h"
 #include "mode3_io.h"
 #include "subpixel.h"
 

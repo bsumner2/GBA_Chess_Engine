@@ -1,5 +1,7 @@
 /** (C) 9 of October, 2025 Burt Sumner */
 /** Free to use, but this copyright message must remain here */
+#define __TRANSPARENT_BOARD_STATE__
+
 #include <GBAdev_memdef.h>
 #include "chess_transposition_table.h"
 

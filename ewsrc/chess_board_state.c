@@ -1,5 +1,7 @@
 /** (C) 12 of October, 2025 Burt Sumner */
 /** Free to use, but this copyright message must remain here */
+#define __TRANSPARENT_BOARD_STATE__
+
 #include <GBAdev_functions.h>
 #include <assert.h>
 #include <stdint.h>
@@ -12,13 +14,6 @@
 #include "debug_io.h"
 #include "graph.h"
 #include "zobrist.h"
-
-struct s_board_state {
-  ChessBoard_t board;
-  GameState_t state;
-  u64 zobrist;
-  PieceState_Graph_t graph;
-};
 
 static const u32 CASTLE_FLAGS_CORRESPONDING_ROOK_RIDS[CASTLE_FLAG_COUNT] = {
   WHITE_ROSTER_ID(ROOK1),
@@ -164,7 +159,6 @@ EWRAM_CODE BoardState_t *BoardState_FromCtx(BoardState_t *board_state,
     state->castle_rights = castle_rights = ALL_CASTLE_RIGHTS_MASK;
   } else {
     /* Active low for now, makes deactivating during forfeiture check easier */
-    ChessPiece_e curpiece;
     u8 curflag = 0;
     castle_rights = 0;
     castle_forfeitures = 0;

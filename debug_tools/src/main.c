@@ -219,7 +219,7 @@ int main(int argc, char *argv[]) {
     return 1;
   }
   
-  uint32_t rounds, last_turn;
+  uint32_t rounds, loop_lim, last_turn;
   
   fread(&rounds, 4, 1, fp);
   fread(&last_turn, 4, 1, fp);
@@ -247,11 +247,13 @@ int main(int argc, char *argv[]) {
   };
   rounds/=sizeof(PGN_Round_t);
   // gotta process last round differently, so decrement rounds count by one.
-  if (WHITE_FLAGBIT==last_turn)
-    --rounds;
+  if (WHITE_FLAGBIT==last_turn || !memcmp(&pgn[rounds-1].moves[1], &((PGN_Move_t){0}), sizeof(PGN_Move_t)))
+    loop_lim=rounds-1;
+  else 
+    loop_lim = rounds;
   PGN_Move_t *curround_moves;
   char *curmove_name;
-  for (uint32_t i = 0; rounds > i; ++i) {
+  for (uint32_t i = 0; loop_lim > i; ++i) {
     curround_moves = pgn[i].moves;
     curmove_name = GetMoveString(curround_moves);
     if (curround_moves[0].promotion!=0 && (PAWN0&curround_moves[0].roster_id)!=0) {
@@ -271,7 +273,7 @@ int main(int argc, char *argv[]) {
     if (curround_moves[1].promotion!=0 && (PAWN0&curround_moves[1].roster_id)!=0) {
       piece_types[BLACK_ROSTER_ID(curround_moves[1].roster_id)] = curround_moves[1].promotion;
     }
-    printf("Moving Piece ID: \x1b[1;34m0x%04X\t=\tWHITE %s\x1b[0m\n\t"
+    printf("Moving Piece ID: \x1b[1;34m0x%04X\t=\tBLACK %s\x1b[0m\n\t"
         "Moving Piece Type: \x1b[1;35m%s\x1b[0m\n\t"
         "Move: %s\n",
         BLACK_ROSTER_ID(curround_moves[1].roster_id),
@@ -281,9 +283,9 @@ int main(int argc, char *argv[]) {
     free(curmove_name);
     curmove_name = NULL;
   }
-  if (WHITE_FLAGBIT==last_turn) {
-    PGN_Move_t *move = pgn[rounds].moves;
-    curmove_name = GetMoveString(move);
+  if (loop_lim!=rounds) {
+    curround_moves = pgn[loop_lim].moves;
+    curmove_name = GetMoveString(curround_moves);
     if (curround_moves[0].promotion!=0 && (PAWN0&curround_moves[0].roster_id)!=0) {
       piece_types[WHITE_ROSTER_ID(curround_moves[0].roster_id)] = curround_moves[0].promotion;
     }
@@ -291,8 +293,8 @@ int main(int argc, char *argv[]) {
     printf("\x1b[1;33mRound %d:\x1b[0m\n\t"
         "Moving Piece ID: \x1b[1;34m0x%04X\t=\tWHITE %s\x1b[0m\n\t"
         "Moving Piece Type: \x1b[1;35m%s\x1b[0m\n\t"
-        "Move: %s\n\t",
-        rounds+1,
+        "Move: %s\n",
+        loop_lim+1,
         WHITE_ROSTER_ID(curround_moves[0].roster_id),
         PieceRID_ToString(curround_moves[0].roster_id),
         PieceType_ToString(WHITE_FLAGBIT|piece_types[WHITE_ROSTER_ID(curround_moves[0].roster_id)]),

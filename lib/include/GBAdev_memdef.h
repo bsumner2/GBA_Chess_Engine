@@ -69,6 +69,8 @@ extern "C" {
 #define KEY_DOWN                    KEY_STAT_DOWN_FLAGBIT
 #define KEY_R                       KEY_STAT_R_FLAGBIT
 #define KEY_L                       KEY_STAT_L_FLAGBIT
+#define KEY_ALL                     KEY_STAT_KEYS_MASK
+#define KEY_ANY                     KEY_ALL
 
 /* REG_KEY_CNT */
 #define KEY_CNT_A_FLAGBIT           KEY_STAT_A_FLAGBIT

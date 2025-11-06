@@ -1,0 +1,218 @@
+[1;33mRound 1:[0m
+	Moving Piece ID: [1;34m0x001B	=	WHITE PAWN3[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: D2 -> D4
+	Moving Piece ID: [1;34m0x0001	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: B8 -> C6
+[1;33mRound 2:[0m
+	Moving Piece ID: [1;34m0x001B	=	WHITE PAWN3[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: D4 -> D5
+	Moving Piece ID: [1;34m0x0001	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: C6 -> B4
+[1;33mRound 3:[0m
+	Moving Piece ID: [1;34m0x0018	=	WHITE PAWN0[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: A2 -> A3
+	Moving Piece ID: [1;34m0x0001	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: B4 -> A6
+[1;33mRound 4:[0m
+	Moving Piece ID: [1;34m0x001C	=	WHITE PAWN4[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: E2 -> E4
+	Moving Piece ID: [1;34m0x0001	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: A6 -> C5
+[1;33mRound 5:[0m
+	Moving Piece ID: [1;34m0x001C	=	WHITE PAWN4[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: E4 -> E5
+	Moving Piece ID: [1;34m0x0009	=	WHITE PAWN1[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: B7 -> B6
+[1;33mRound 6:[0m
+	Moving Piece ID: [1;34m0x0019	=	WHITE PAWN1[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: B2 -> B4
+	Moving Piece ID: [1;34m0x0001	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: C5 -> E4
+[1;33mRound 7:[0m
+	Moving Piece ID: [1;34m0x0013	=	WHITE QUEEN[0m
+	Moving Piece Type: [1;35mWHITE_QUEEN[0m
+	Move: D1 -> D3
+	Moving Piece ID: [1;34m0x0001	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: E4 Captures F2
+[1;33mRound 8:[0m
+	Moving Piece ID: [1;34m0x0014	=	WHITE KING[0m
+	Moving Piece Type: [1;35mWHITE_KING[0m
+	Move: E1 Captures F2
+	Moving Piece ID: [1;34m0x000F	=	WHITE PAWN7[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: H7 -> H5
+[1;33mRound 9:[0m
+	Moving Piece ID: [1;34m0x0011	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mWHITE_KNIGHT[0m
+	Move: B1 -> C3
+	Moving Piece ID: [1;34m0x0002	=	WHITE BISHOP0[0m
+	Moving Piece Type: [1;35mBLACK_BISHOP[0m
+	Move: C8 -> B7
+[1;33mRound 10:[0m
+	Moving Piece ID: [1;34m0x0015	=	WHITE BISHOP1[0m
+	Moving Piece Type: [1;35mWHITE_BISHOP[0m
+	Move: F1 -> E2
+	Moving Piece ID: [1;34m0x000F	=	WHITE PAWN7[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: H5 -> H4
+[1;33mRound 11:[0m
+	Moving Piece ID: [1;34m0x0012	=	WHITE BISHOP0[0m
+	Moving Piece Type: [1;35mWHITE_BISHOP[0m
+	Move: C1 -> E3
+	Moving Piece ID: [1;34m0x0003	=	WHITE QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: D8 -> C8
+[1;33mRound 12:[0m
+	Moving Piece ID: [1;34m0x0015	=	WHITE BISHOP1[0m
+	Moving Piece Type: [1;35mWHITE_BISHOP[0m
+	Move: E2 -> F3
+	Moving Piece ID: [1;34m0x0003	=	WHITE QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: C8 -> D8
+[1;33mRound 13:[0m
+	Moving Piece ID: [1;34m0x0016	=	WHITE KNIGHT1[0m
+	Moving Piece Type: [1;35mWHITE_KNIGHT[0m
+	Move: G1 -> E2
+	Moving Piece ID: [1;34m0x0003	=	WHITE QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: D8 -> C8
+[1;33mRound 14:[0m
+	Moving Piece ID: [1;34m0x0010	=	WHITE ROOK0[0m
+	Moving Piece Type: [1;35mWHITE_ROOK[0m
+	Move: A1 -> D1
+	Moving Piece ID: [1;34m0x0003	=	WHITE QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: C8 -> D8
+[1;33mRound 15:[0m
+	Moving Piece ID: [1;34m0x0011	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mWHITE_KNIGHT[0m
+	Move: C3 -> B5
+	Moving Piece ID: [1;34m0x000A	=	WHITE PAWN2[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: C7 -> C5
+[1;33mRound 16:[0m
+	Moving Piece ID: [1;34m0x0017	=	WHITE ROOK1[0m
+	Moving Piece Type: [1;35mWHITE_ROOK[0m
+	Move: H1 -> E1
+[1;33mRound 1:[0m
+	Moving Piece ID: [1;34m0x001B	=	WHITE PAWN3[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: D2 -> D4
+	Moving Piece ID: [1;34m0x0001	=	BLACK KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: B8 -> C6
+[1;33mRound 2:[0m
+	Moving Piece ID: [1;34m0x001B	=	WHITE PAWN3[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: D4 -> D5
+	Moving Piece ID: [1;34m0x0001	=	BLACK KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: C6 -> B4
+[1;33mRound 3:[0m
+	Moving Piece ID: [1;34m0x0018	=	WHITE PAWN0[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: A2 -> A3
+	Moving Piece ID: [1;34m0x0001	=	BLACK KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: B4 -> A6
+[1;33mRound 4:[0m
+	Moving Piece ID: [1;34m0x001C	=	WHITE PAWN4[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: E2 -> E4
+	Moving Piece ID: [1;34m0x0001	=	BLACK KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: A6 -> C5
+[1;33mRound 5:[0m
+	Moving Piece ID: [1;34m0x001C	=	WHITE PAWN4[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: E4 -> E5
+	Moving Piece ID: [1;34m0x0009	=	BLACK PAWN1[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: B7 -> B6
+[1;33mRound 6:[0m
+	Moving Piece ID: [1;34m0x0019	=	WHITE PAWN1[0m
+	Moving Piece Type: [1;35mWHITE_PAWN[0m
+	Move: B2 -> B4
+	Moving Piece ID: [1;34m0x0001	=	BLACK KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: C5 -> E4
+[1;33mRound 7:[0m
+	Moving Piece ID: [1;34m0x0013	=	WHITE QUEEN[0m
+	Moving Piece Type: [1;35mWHITE_QUEEN[0m
+	Move: D1 -> D3
+	Moving Piece ID: [1;34m0x0001	=	BLACK KNIGHT0[0m
+	Moving Piece Type: [1;35mBLACK_KNIGHT[0m
+	Move: E4 Captures F2
+[1;33mRound 8:[0m
+	Moving Piece ID: [1;34m0x0014	=	WHITE KING[0m
+	Moving Piece Type: [1;35mWHITE_KING[0m
+	Move: E1 Captures F2
+	Moving Piece ID: [1;34m0x000F	=	BLACK PAWN7[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: H7 -> H5
+[1;33mRound 9:[0m
+	Moving Piece ID: [1;34m0x0011	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mWHITE_KNIGHT[0m
+	Move: B1 -> C3
+	Moving Piece ID: [1;34m0x0002	=	BLACK BISHOP0[0m
+	Moving Piece Type: [1;35mBLACK_BISHOP[0m
+	Move: C8 -> B7
+[1;33mRound 10:[0m
+	Moving Piece ID: [1;34m0x0015	=	WHITE BISHOP1[0m
+	Moving Piece Type: [1;35mWHITE_BISHOP[0m
+	Move: F1 -> E2
+	Moving Piece ID: [1;34m0x000F	=	BLACK PAWN7[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: H5 -> H4
+[1;33mRound 11:[0m
+	Moving Piece ID: [1;34m0x0012	=	WHITE BISHOP0[0m
+	Moving Piece Type: [1;35mWHITE_BISHOP[0m
+	Move: C1 -> E3
+	Moving Piece ID: [1;34m0x0003	=	BLACK QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: D8 -> C8
+[1;33mRound 12:[0m
+	Moving Piece ID: [1;34m0x0015	=	WHITE BISHOP1[0m
+	Moving Piece Type: [1;35mWHITE_BISHOP[0m
+	Move: E2 -> F3
+	Moving Piece ID: [1;34m0x0003	=	BLACK QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: C8 -> D8
+[1;33mRound 13:[0m
+	Moving Piece ID: [1;34m0x0016	=	WHITE KNIGHT1[0m
+	Moving Piece Type: [1;35mWHITE_KNIGHT[0m
+	Move: G1 -> E2
+	Moving Piece ID: [1;34m0x0003	=	BLACK QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: D8 -> C8
+[1;33mRound 14:[0m
+	Moving Piece ID: [1;34m0x0010	=	WHITE ROOK0[0m
+	Moving Piece Type: [1;35mWHITE_ROOK[0m
+	Move: A1 -> D1
+	Moving Piece ID: [1;34m0x0003	=	BLACK QUEEN[0m
+	Moving Piece Type: [1;35mBLACK_QUEEN[0m
+	Move: C8 -> D8
+[1;33mRound 15:[0m
+	Moving Piece ID: [1;34m0x0011	=	WHITE KNIGHT0[0m
+	Moving Piece Type: [1;35mWHITE_KNIGHT[0m
+	Move: C3 -> B5
+	Moving Piece ID: [1;34m0x000A	=	BLACK PAWN2[0m
+	Moving Piece Type: [1;35mBLACK PAWN[0m
+	Move: C7 -> C5
+[1;33mRound 16:[0m
+	Moving Piece ID: [1;34m0x0017	=	WHITE ROOK1[0m
+	Moving Piece Type: [1;35mWHITE_ROOK[0m
+	Move: H1 -> E1

@@ -1,3 +1,11 @@
+/**
+ * (C) Burt O Sumner 2025 Authorship rights reserved.
+ * Free to use and edit src code, but any credit comments, like this one,
+ * must remain visible & untouched.
+ **/
+
+#define __TRANSPARENT_BOARD_STATE__
+
 #include <GBAdev_types.h>
 #include <GBAdev_util_macros.h>
 #include "chess_move_iterator.h"

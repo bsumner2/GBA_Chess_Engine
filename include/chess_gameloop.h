@@ -19,13 +19,13 @@ extern "C" {
 INLN void UPDATE_PIECE_SPRITE_LOCATION(Obj_Attr_t *spr_obj, 
                                        ChessBoard_Idx_t move);
 #define KSYNC_DISCRETE KeypadSync_OnKeysStroke
-#define KSYNC_CONTINUOUS KeyPadSync_OnKeysDown
+#define KSYNC_CONTINUOUS KeypadSync_OnKeysDown
 #define Ksync(key, k_disc_or_cont)\
   k_disc_or_cont(KEY_##key)
 INLN void Vsync(void);
 
 INLN void KeypadSync_OnKeysStroke(u16 key_flags);
-INLN void KeyPadSync_OnKeysDown(u16 key_flags);
+INLN void KeypadSync_OnKeysDown(u16 key_flags);
 void ChessBG_Init(void);
 
 IWRAM_CODE void ChessGameloop_ISR_Handler(void);
@@ -78,13 +78,13 @@ void Vsync(void) {
   SUPERVISOR_CALL(0x05);
 }
 
-void KeypadSync_OnKeysStroke(u16 key_flags) {
+FORCE_INLINE void KeypadSync_OnKeysStroke(u16 key_flags) {
   do 
     IRQ_Sync(IRQ_FLAG(KEYPAD)); 
   while (!(key_flags&KEY_CURR) || (key_flags&KEY_PREV));
 }
 
-void KeyPadSync_OnKeysDown(u16 key_flags) {
+FORCE_INLINE void KeypadSync_OnKeysDown(u16 key_flags) {
   do
     IRQ_Sync(IRQ_FLAG(KEYPAD));
   while (!(key_flags&KEY_CURR));

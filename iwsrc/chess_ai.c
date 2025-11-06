@@ -1,5 +1,7 @@
 /** (C) 10 of October, 2025 Burt Sumner */
 /** Free to use, but this copyright message must remain here */
+#define __TRANSPARENT_BOARD_STATE__
+
 #include <GBAdev_functions.h>
 #include <GBAdev_memmap.h>
 #include "GBAdev_memdef.h"
@@ -27,13 +29,6 @@
 #endif  /* Debug mode DFS traversal stepping control macros */
 IWRAM_CODE i16 BoardState_Eval(const BoardState_t *state,
                                Move_Validation_Flag_e last_move);
-
-struct s_board_state {
-  ChessBoard_t board;
-  GameState_t state;
-  u64 zobrist;
-  PieceState_Graph_t graph;
-};
 
 typedef union u_chess_ai_piece_tracker {
   struct s_chess_ai_piece_tracker {
